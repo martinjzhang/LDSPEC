@@ -240,7 +240,7 @@ def main(args):
             win_size=int(1e7),
             memory=MEMORY,
             verbose=True,
-            n_iter=5,
+            n_iter=10,
         )
 
         # Store the entire file and a summary df
@@ -249,7 +249,7 @@ def main(args):
         dbfile.close()
         for res in dic_res:
             dic_res[res]['summary'].to_csv(PREFIX_OUT+'_res%s.tsv' % res, sep='\t', index=False)
-        dic_res[res]['summary'].to_csv(PREFIX_OUT+'_res%s.tsv' % res, sep='\t', index=False)
+        dic_res[res]['summary'].to_csv(PREFIX_OUT+'.tsv', sep='\t', index=False)
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
 
