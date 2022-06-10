@@ -7,13 +7,12 @@ import warnings
 
 
 def estimate(
-    dic_data,
+    df_score
     df_sumstats,
-    dic_ld,
+    dic_data,
     df_annot,
     pannot_list=[],
     pannot_hr_list=[],
-    df_score=None,
     n_jn_block=100,
     sym_non_pAN="non-pAN",
     win_size=int(1e7),
@@ -26,6 +25,9 @@ def estimate(
 
     Parameters
     ----------
+    df_score : pd.DataFrame, default=None
+        GDReg LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'LD:AN1',
+        'LD:AN2', 'DLD:PAN:AN1', 'DLD:PAN:AN2'].
     dic_data : dict
         Genotype data reader, organized, for each CHR, as
 
@@ -38,7 +40,7 @@ def estimate(
     dic_ld : dict of sp.sparse.csr_matrix (TODO)
         dic_mat_ld[CHR] for LD matrix of chromosome CHR. Used in `gdreg.score.compute_score`.
     df_annot : pd.DataFrame
-        Single-SNP annotation. Used in `gdreg.score.compute_score`.
+        Single-SNP annotation. Used in `gdreg.score.summarize`.
     df_pannot_list : list of pd.DataFrame, default=[]
         Each element corresponds to SNP-pair annotation. Must contain
         ['CHR', 'SNP', 'BP', 'pAN:pAN1'] columns. Used in `gdreg.score.compute_score`.
@@ -46,9 +48,6 @@ def estimate(
         Each element corresponds to a high-res SNP-pair annotation. Must contain
         ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:pAN1'] columns. Used in
         `gdreg.score.compute_score`.
-    df_score : pd.DataFrame, default=None
-        GDReg LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'LD:AN1',
-        'LD:AN2', 'DLD:PAN:AN1', 'DLD:PAN:AN2'].
     n_jn_block : int
         Number of JN blocks.
     sym_non_pAN : str, default='non-pAN'
@@ -122,35 +121,6 @@ def estimate(
             dic_data,
             dic_ld,
             df_annot,
-            win_size=win_size,
-            memory=memory,
-            verbose=verbose,
-        )
-
-    df_score.index = df_score["SNP"]
-    reg_list = [x for x in df_score if x.startswith("LD:")] + ["E"]
-    temp_df_reg = df_reg.join(df_score[reg_list])
-    dic_res[0] = regress(temp_df_reg, dic_block, n_sample_zsq, verbose=verbose, verbose_prefix='    ')
-    dic_res[0]["summary"] = summarize(dic_res[0], df_annot)
-    
-    # Second pass : \tau & \rho
-    for i_iter in range(1, n_iter+1):
-        v_var_ps = np.zeros(df_annot.shape[0], dtype=np.float32)
-        res = i_iter - 1
-        for LDAN, coef in zip(dic_res[res]["term"], dic_res[res]["coef_jn"]):
-            if (LDAN != "E") & (LDAN.startswith("DLD:") is False):
-                AN = LDAN.replace("LD:", "")
-                v_var_ps += coef * df_annot[AN].values
-        v_var_ps = v_var_ps.clip(
-            min=0.001 / v_var_ps.shape[0]
-        )  # Lower bound (check later)
-        dic_var_ps = {x: y for x, y in zip(df_annot["SNP"], v_var_ps)}
-
-        # Recompute score (computational bottleneck)
-        df_score = gdreg.score.compute_score(
-            dic_data,
-            dic_ld,
-            df_annot,
             pannot_list=pannot_list,
             pannot_hr_list=pannot_hr_list,
             sym_non_pAN=sym_non_pAN,
@@ -158,31 +128,78 @@ def estimate(
             memory=memory,
             verbose=verbose,
             verbose_prefix='    ',
-            dic_var_ps=dic_var_ps,
         )
+#         df_score = gdreg.score.compute_score(
+#             dic_data,
+#             dic_ld,
+#             df_annot,
+#             win_size=win_size,
+#             memory=memory,
+#             verbose=verbose,
+#         )
 
-        df_score.index = df_score["SNP"]
-        reg_list = (
-            [x for x in df_score if x.startswith("LD:")]
-            + [x for x in df_score if x.startswith("DLD:")]
-            + ["E"]
-        )
-        temp_df_reg = df_reg.join(df_score[reg_list])
-        dic_res[i_iter] = regress(
-            temp_df_reg, dic_block, n_sample_zsq, verbose=verbose, verbose_prefix='    ',
-        )
+    df_score.index = df_score["SNP"]
+    reg_list = [x for x in df_score if x.startswith("LD:")] + ["E"]
+    temp_df_reg = df_reg.join(df_score[reg_list])
+    dic_res[0] = regress(temp_df_reg, dic_block, n_sample_zsq, verbose=verbose, verbose_prefix='    ')
+#     dic_res[0]["summary"] = summarize(dic_res[0], df_annot)
+    
+    # Regression : estimate both \tau and \rho
+    reg_list = [x for x in df_score if x.startswith("LD:")] + [x for x in df_score if x.startswith("DLD:")] + ["E"]
+    temp_df_reg = df_reg.join(df_score[reg_list])
+    dic_res[1] = regress(temp_df_reg, dic_block, n_sample_zsq, verbose=verbose, verbose_prefix='    ')
+#     dic_res[1]["summary"] = summarize(dic_res[1], df_annot)
+    
+#     # Second pass : \tau & \rho
+#     for i_iter in range(1, n_iter+1):
+#         v_var_ps = np.zeros(df_annot.shape[0], dtype=np.float32)
+#         res = i_iter - 1
+#         for LDAN, coef in zip(dic_res[res]["term"], dic_res[res]["coef_jn"]):
+#             if (LDAN != "E") & (LDAN.startswith("DLD:") is False):
+#                 AN = LDAN.replace("LD:", "")
+#                 v_var_ps += coef * df_annot[AN].values
+#         v_var_ps = v_var_ps.clip(
+#             min=0.001 / v_var_ps.shape[0]
+#         )  # Lower bound (check later)
+#         dic_var_ps = {x: y for x, y in zip(df_annot["SNP"], v_var_ps)}
+
+#         # Recompute score (computational bottleneck)
+#         df_score = gdreg.score.compute_score(
+#             dic_data,
+#             dic_ld,
+#             df_annot,
+#             pannot_list=pannot_list,
+#             pannot_hr_list=pannot_hr_list,
+#             sym_non_pAN=sym_non_pAN,
+#             win_size=win_size,
+#             memory=memory,
+#             verbose=verbose,
+#             verbose_prefix='    ',
+#             dic_var_ps=dic_var_ps,
+#         )
+
+#         df_score.index = df_score["SNP"]
+#         reg_list = (
+#             [x for x in df_score if x.startswith("LD:")]
+#             + [x for x in df_score if x.startswith("DLD:")]
+#             + ["E"]
+#         )
+#         temp_df_reg = df_reg.join(df_score[reg_list])
+#         dic_res[i_iter] = regress(
+#             temp_df_reg, dic_block, n_sample_zsq, verbose=verbose, verbose_prefix='    ',
+#         )
         
-        dic_res[i_iter]["summary"] = summarize(dic_res[i_iter], df_annot)
+#         dic_res[i_iter]["summary"] = summarize(dic_res[i_iter], df_annot)
         
-        # Convergence check
-        v_tau = dic_res[i_iter]["summary"]["tau"]
-        v_tau_prev = dic_res[i_iter-1]["summary"]["tau"]
-        rel_dif = np.absolute(v_tau-v_tau_prev).sum() / np.absolute(v_tau).sum()
-        dic_res[i_iter]["converge"] = rel_dif<0.01 
-        if verbose:
-            print("    Iter %d finished, ref_dif=%0.2g, converge=%s\n" % (i_iter, rel_dif, dic_res[i_iter]["converge"]))
-        if dic_res[i_iter]["converge"]:
-            break
+#         # Convergence check
+#         v_tau = dic_res[i_iter]["summary"]["tau"]
+#         v_tau_prev = dic_res[i_iter-1]["summary"]["tau"]
+#         rel_dif = np.absolute(v_tau-v_tau_prev).sum() / np.absolute(v_tau).sum()
+#         dic_res[i_iter]["converge"] = rel_dif<0.01 
+#         if verbose:
+#             print("    Iter %d finished, ref_dif=%0.2g, converge=%s\n" % (i_iter, rel_dif, dic_res[i_iter]["converge"]))
+#         if dic_res[i_iter]["converge"]:
+#             break
             
     if verbose:
         print("    Completed, time=%0.1fs" % (time.time() - start_time))
@@ -190,19 +207,23 @@ def estimate(
     return dic_res
 
 
-def summarize(dic_res, df_annot):
+def summarize(dic_res, df_annot,
+              pannot_list=[],
+              pannot_hr_list=[],
+              sym_non_pAN="non-pAN",
+              ):
     """
     Summarize GDREG result.
 
     Parameters
     ----------
-    dic_res_reg : dict
+    dic_res : dict
         Regression results.
 
-        - dic_res_reg['term'] : list of terms.
-        - dic_res_reg['coef'] : estimated coefs. np.ndarray(dtype=np.float32).
-        - dic_res_reg['coef_jn'] : JN estimated coefs. np.ndarray(dtype=np.float32).
-        - dic_res_reg['coef_jn_cov'] : estimated coef covariance. np.ndarray(dtype=np.float32).
+        - dic_res['term'] : list of terms.
+        - dic_res['coef'] : estimated coefs. np.ndarray(dtype=np.float32).
+        - dic_res['coef_jn'] : JN estimated coefs. np.ndarray(dtype=np.float32).
+        - dic_res['coef_jn_cov'] : estimated coef covariance. np.ndarray(dtype=np.float32).
 
     df_annot : pd.DataFrame
         Single-SNP annotation. Used in `gdreg.score.compute_score`.
@@ -228,49 +249,88 @@ def summarize(dic_res, df_annot):
     1. Double check later.
 
     """
-
+    
     # Annotation info
+    AN_list = [x for x in df_annot if x.startswith("AN:")]
+    pAN_list = [[y for y in x if y.startswith("pAN")][0] for x in pannot_list]
+    pAN_hr_list = [[y for y in x if y.startswith("pAN")][0] for x in pannot_hr_list]
+
+    dic_annot = {}
+    for AN in AN_list:
+        dic_annot[AN] = {x: y for x, y in zip(df_annot["SNP"], df_annot[AN])}
+    dic_pannot = {}
+    for temp_df in pannot_list:
+        pAN = [x for x in temp_df if x.startswith("pAN:")][0]
+        dic_pannot[pAN] = {x: y for x, y in zip(temp_df["SNP"], temp_df[pAN])}
+    dic_pannot_hr = {}
+    for temp_df in pannot_hr_list:
+        pAN = [x for x in temp_df if x.startswith("pAN:")][0]
+        dic_pannot_hr[pAN] = [(x, y) for x, y in zip(temp_df["SNP"], temp_df["pSNP"])]
+        
+    # dic_mat_G
+    dic_mat_G = {}
+    v_snp = np.array(df_annot["SNP"])
+    snp_set = set(v_snp)
+    for pAN in pAN_list:       
+        v_pAN = [
+                dic_pannot[pAN][x] if x in dic_pannot[pAN] else sym_non_pAN
+                for x in v_snp
+            ]
+        mat_G = gdreg.util.pannot_to_csr(v_pAN, sym_non_pAN=sym_non_pAN, flag_matS=False)
+        dic_mat_G[pAN] = mat_G.copy()
+
+    for pAN in pAN_hr_list:
+        snp_pair_list = [
+            x
+            for x in dic_pannot_hr[pAN]
+            if (x[0] in snp_set) & (x[1] in snp_set)
+        ]
+        mat_G = gdreg.util.pannot_hr_to_csr(v_snp, snp_pair_list)
+        dic_mat_G[pAN] = mat_G.copy()    
+
+    # Results info
     LD_list = [x for x in dic_res["term"] if x.startswith("LD:")]
     DLD_list = [x for x in dic_res["term"] if x.startswith("DLD:")]
 
-    AN_list = [x.replace("LD:", "") for x in LD_list]
-    pAN_list = sorted(set([x.replace("DLD:", "").split("|")[0] for x in DLD_list]))
+    res_AN_list = [x.replace("LD:", "") for x in LD_list]
+    res_pAN_list = sorted(set([x.replace("DLD:", "").split("|")[0] for x in DLD_list]))
 
-    # Check consistency with df_annot
+    # Check consistency betweeno results and annotation df_annot
     err_msg = "df_annot does not contain all annots in dic_res"
-    assert len(set(AN_list) - set(df_annot)) == 0, err_msg 
-
-    col_list = ["annot", "n_snp", "tau", "tau_se", "h2", "h2_se", "enrich", "enrich_se", "r2", "r2_se"]
-    for pAN in pAN_list:
-        col_list += ["%s|%s" % (x, pAN) for x in ["rho", "rho_se", "r2", "r2_se"]]
-
-    df_summary = pd.DataFrame(index=AN_list, columns=col_list)
-
+    assert len(set(res_AN_list) - set(AN_list)) == 0, err_msg 
+    err_msg = "pannot_list and pannot_hr_list does not contain all pannots in dic_res"
+    assert len(set(res_pAN_list) - set(pAN_list+pAN_hr_list)) == 0, err_msg 
+    
+    col_list = ["annot", "n_snp", "tau", "tau_se", "h2", "h2_se", "enrich", "enrich_se"]
+    df_summary = pd.DataFrame(index=res_AN_list, columns=col_list)
+    col_list = ["pannot", "n_snp_pair", "rho", "rho_se", "cov", "cov_se"]
+    df_summary_p = pd.DataFrame(index=res_pAN_list, columns=col_list)
+    
     # Summary : basic
     df_summary["annot"] = df_summary.index
-    df_summary["n_snp"] = [(df_annot[x] == 1).sum() for x in AN_list]
+    df_summary["n_snp"] = [(df_annot[x] == 1).sum() for x in res_AN_list]
+    df_summary_p["pannot"] = df_summary_p.index
+    df_summary_p["n_snp_pair"] = [dic_mat_G[x].sum() for x in res_pAN_list]
 
     # Summary : tau & rho
     temp_dic = {x: y for x, y in zip(dic_res["term"], dic_res["coef_jn"])}
-    df_summary["tau"] = [temp_dic["LD:%s" % x] for x in AN_list]
-    for pAN in pAN_list:
-        df_summary["rho|%s" % pAN] = [temp_dic["DLD:%s|%s" % (pAN, x)] for x in AN_list]
+    df_summary["tau"] = [temp_dic["LD:%s" % x] for x in res_AN_list]
+    df_summary_p["rho"] = [temp_dic["DLD:%s" % x] for x in res_pAN_list]
 
     temp_dic = {x: np.sqrt(y) for x, y in zip(dic_res["term"], np.diag(dic_res["coef_jn_cov"]))}
-    df_summary["tau_se"] = [temp_dic["LD:%s" % x] for x in AN_list]
-    for pAN in pAN_list:
-        df_summary["rho_se|%s" % pAN] = [temp_dic["DLD:%s|%s" % (pAN, x)] for x in AN_list]
+    df_summary["tau_se"] = [temp_dic["LD:%s" % x] for x in res_AN_list]
+    df_summary_p["rho_se"] = [temp_dic["DLD:%s" % x] for x in res_pAN_list]
 
     # Summary : h2 & h2_se & enrich
     df_cov = pd.DataFrame(
         index=dic_res["term"], columns=dic_res["term"], data=dic_res["coef_jn_cov"]
     )
     temp_mat = df_cov.loc[LD_list, LD_list].values
-    for AN in AN_list:
+    for AN in res_AN_list:
         if len(set(df_annot[AN])) > 2:
             continue
             
-        temp_v = df_annot.loc[df_annot[AN] == 1, AN_list].sum(axis=0).values
+        temp_v = df_annot.loc[df_annot[AN] == 1, res_AN_list].sum(axis=0).values
         df_summary.loc[AN, "h2"] = (temp_v * df_summary["tau"]).sum()
         df_summary.loc[AN, "h2_se"] = np.sqrt(temp_v.dot(temp_mat).dot(temp_v))
 
@@ -282,7 +342,7 @@ def summarize(dic_res, df_annot):
             if AN.endswith(term):
                 col_list = [x for x in df_annot if x.endswith(term)]
                 ind_ref = (df_annot[col_list].values == 1).sum(axis=1) > 0
-        temp_v_ref = df_annot.loc[ind_ref, AN_list].sum(axis=0).values
+        temp_v_ref = df_annot.loc[ind_ref, res_AN_list].sum(axis=0).values
 
         n_snp_cate = (df_annot[AN] == 1).sum()
         n_snp_dif = ind_ref.sum() - n_snp_cate
@@ -302,29 +362,152 @@ def summarize(dic_res, df_annot):
         )
 
     # Summary : r2 and per-pannot r2
-    for AN in AN_list:
-        if len(set(df_annot[AN])) > 2:
-            continue
-        temp_df = df_annot.loc[df_annot[AN] == 1]
-        # r2 
-        pAN_AN_list = [x.replace('DLD:','').split('|') for x in DLD_list]
-        temp_v = np.array([temp_df[x[1]].mean() for x in pAN_AN_list])
-        temp_rho = np.array([df_summary.loc[x[1], "rho|%s"%x[0]] for x in pAN_AN_list])
-        temp_mat = df_cov.loc[DLD_list, DLD_list].values
-        df_summary.loc[AN, "r2"] = (temp_v * temp_rho).sum()
-        df_summary.loc[AN, "r2_se"] = np.sqrt(temp_v.dot(temp_mat).dot(temp_v))
+    for pAN in res_pAN_list:
         
-        # per-pannot r2
-        for pAN in pAN_list:
-            sub_DLD_list = [x for x in DLD_list if pAN in x]
-            pAN_AN_list = [x.replace('DLD:','').split('|') for x in sub_DLD_list]
-            temp_v = np.array([temp_df[x[1]].mean() for x in pAN_AN_list])
-            temp_rho = np.array([df_summary.loc[x[1], "rho|%s"%x[0]] for x in pAN_AN_list])
-            temp_mat = df_cov.loc[sub_DLD_list, sub_DLD_list].values
-            df_summary.loc[AN, "r2|%s"%pAN] = (temp_v * temp_rho).sum()
-            df_summary.loc[AN, "r2_se|%s"%pAN] = np.sqrt(temp_v.dot(temp_mat).dot(temp_v))
+        temp_v = np.array([(dic_mat_G[pAN] * dic_mat_G[x]).sum() for x in res_pAN_list])
+        temp_rho = df_summary_p['rho'].values
+        temp_mat = df_cov.loc[DLD_list, DLD_list].values
+        df_summary_p.loc[pAN, "cov"] = (temp_v * temp_rho).sum()
+        df_summary_p.loc[pAN, "cov_se"] = np.sqrt(temp_v.dot(temp_mat).dot(temp_v))
 
-    return df_summary
+    return df_summary,df_summary_p
+
+
+# def summarize(dic_res, df_annot):
+#     """
+#     Summarize GDREG result.
+
+#     Parameters
+#     ----------
+#     dic_res_reg : dict
+#         Regression results.
+
+#         - dic_res_reg['term'] : list of terms.
+#         - dic_res_reg['coef'] : estimated coefs. np.ndarray(dtype=np.float32).
+#         - dic_res_reg['coef_jn'] : JN estimated coefs. np.ndarray(dtype=np.float32).
+#         - dic_res_reg['coef_jn_cov'] : estimated coef covariance. np.ndarray(dtype=np.float32).
+
+#     df_annot : pd.DataFrame
+#         Single-SNP annotation. Used in `gdreg.score.compute_score`.
+#     df_pannot_list : list of pd.DataFrame, default=[]
+#         Each element corresponds to SNP-pair annotation. Must contain
+#         ['CHR', 'SNP', 'BP', 'pAN:pAN1'] columns. Used in `gdreg.score.compute_score`.
+#     df_pannot_hr_list : list of pd.DataFrame, default=[]
+#         Each element corresponds to a high-res SNP-pair annotation. Must contain
+#         ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:pAN1'] columns. Used in
+#         `gdreg.score.compute_score`.
+#     sym_non_pAN : str, default='non-pAN'
+#         Symbol for SNPs not in the SNP-pair annotation.
+#     n_block: int, default=100
+#         Number of jackknife blocks.
+
+#     Returns
+#     -------
+#     df_summary : pd.DataFrame
+#         Regression result summary.
+        
+#     TODO
+#     ----
+#     1. Double check later.
+
+#     """
+
+#     # Annotation info
+#     LD_list = [x for x in dic_res["term"] if x.startswith("LD:")]
+#     DLD_list = [x for x in dic_res["term"] if x.startswith("DLD:")]
+
+#     AN_list = [x.replace("LD:", "") for x in LD_list]
+#     pAN_list = sorted(set([x.replace("DLD:", "").split("|")[0] for x in DLD_list]))
+
+#     # Check consistency with df_annot
+#     err_msg = "df_annot does not contain all annots in dic_res"
+#     assert len(set(AN_list) - set(df_annot)) == 0, err_msg 
+
+#     col_list = ["annot", "n_snp", "tau", "tau_se", "h2", "h2_se", "enrich", "enrich_se", "r2", "r2_se"]
+#     for pAN in pAN_list:
+#         col_list += ["%s|%s" % (x, pAN) for x in ["rho", "rho_se", "r2", "r2_se"]]
+
+#     df_summary = pd.DataFrame(index=AN_list, columns=col_list)
+
+#     # Summary : basic
+#     df_summary["annot"] = df_summary.index
+#     df_summary["n_snp"] = [(df_annot[x] == 1).sum() for x in AN_list]
+
+#     # Summary : tau & rho
+#     temp_dic = {x: y for x, y in zip(dic_res["term"], dic_res["coef_jn"])}
+#     df_summary["tau"] = [temp_dic["LD:%s" % x] for x in AN_list]
+#     for pAN in pAN_list:
+#         df_summary["rho|%s" % pAN] = [temp_dic["DLD:%s|%s" % (pAN, x)] for x in AN_list]
+
+#     temp_dic = {x: np.sqrt(y) for x, y in zip(dic_res["term"], np.diag(dic_res["coef_jn_cov"]))}
+#     df_summary["tau_se"] = [temp_dic["LD:%s" % x] for x in AN_list]
+#     for pAN in pAN_list:
+#         df_summary["rho_se|%s" % pAN] = [temp_dic["DLD:%s|%s" % (pAN, x)] for x in AN_list]
+
+#     # Summary : h2 & h2_se & enrich
+#     df_cov = pd.DataFrame(
+#         index=dic_res["term"], columns=dic_res["term"], data=dic_res["coef_jn_cov"]
+#     )
+#     temp_mat = df_cov.loc[LD_list, LD_list].values
+#     for AN in AN_list:
+#         if len(set(df_annot[AN])) > 2:
+#             continue
+            
+#         temp_v = df_annot.loc[df_annot[AN] == 1, AN_list].sum(axis=0).values
+#         df_summary.loc[AN, "h2"] = (temp_v * df_summary["tau"]).sum()
+#         df_summary.loc[AN, "h2_se"] = np.sqrt(temp_v.dot(temp_mat).dot(temp_v))
+
+#         # enrich
+#         # determine reference annotation
+#         # TODO : test
+#         ind_ref = np.ones(df_annot.shape[0], dtype=bool)
+#         for term in ["_common", "_lf", "_rare"]:
+#             if AN.endswith(term):
+#                 col_list = [x for x in df_annot if x.endswith(term)]
+#                 ind_ref = (df_annot[col_list].values == 1).sum(axis=1) > 0
+#         temp_v_ref = df_annot.loc[ind_ref, AN_list].sum(axis=0).values
+
+#         n_snp_cate = (df_annot[AN] == 1).sum()
+#         n_snp_dif = ind_ref.sum() - n_snp_cate
+#         if n_snp_dif < n_snp_cate*0.1:
+#             continue
+#         temp_v_combine = (
+#             temp_v * (1 / n_snp_cate + 1 / n_snp_dif) - temp_v_ref / n_snp_dif
+#         )
+
+#         h2_ps_ref = (temp_v_ref * df_summary["tau"]).sum() / ind_ref.sum()
+#         df_summary.loc[AN, "enrich"] = df_summary.loc[AN, "h2"] / n_snp_cate / h2_ps_ref
+
+#         dif_ = (temp_v_combine * df_summary["tau"]).sum()
+#         se_ = np.sqrt(temp_v_combine.dot(temp_mat).dot(temp_v_combine))
+#         df_summary.loc[AN, "enrich_se"] = np.absolute(
+#             se_ / dif_ * (df_summary.loc[AN, "enrich"] - 1)
+#         )
+
+#     # Summary : r2 and per-pannot r2
+#     for AN in AN_list:
+#         if len(set(df_annot[AN])) > 2:
+#             continue
+#         temp_df = df_annot.loc[df_annot[AN] == 1]
+#         # r2 
+#         pAN_AN_list = [x.replace('DLD:','').split('|') for x in DLD_list]
+#         temp_v = np.array([temp_df[x[1]].mean() for x in pAN_AN_list])
+#         temp_rho = np.array([df_summary.loc[x[1], "rho|%s"%x[0]] for x in pAN_AN_list])
+#         temp_mat = df_cov.loc[DLD_list, DLD_list].values
+#         df_summary.loc[AN, "r2"] = (temp_v * temp_rho).sum()
+#         df_summary.loc[AN, "r2_se"] = np.sqrt(temp_v.dot(temp_mat).dot(temp_v))
+        
+#         # per-pannot r2
+#         for pAN in pAN_list:
+#             sub_DLD_list = [x for x in DLD_list if pAN in x]
+#             pAN_AN_list = [x.replace('DLD:','').split('|') for x in sub_DLD_list]
+#             temp_v = np.array([temp_df[x[1]].mean() for x in pAN_AN_list])
+#             temp_rho = np.array([df_summary.loc[x[1], "rho|%s"%x[0]] for x in pAN_AN_list])
+#             temp_mat = df_cov.loc[sub_DLD_list, sub_DLD_list].values
+#             df_summary.loc[AN, "r2|%s"%pAN] = (temp_v * temp_rho).sum()
+#             df_summary.loc[AN, "r2_se|%s"%pAN] = np.sqrt(temp_v.dot(temp_mat).dot(temp_v))
+
+#     return df_summary
 
 
 # https://github.com/martinjzhang/wes_rare/blob/master/wes_rare/ld_method.py

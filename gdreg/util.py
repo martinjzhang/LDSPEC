@@ -139,7 +139,7 @@ def pannot_to_csr(v_gene, sym_non_pAN="non-pAN", flag_matS=True):
         mat_G.setdiag(
             False
         )  # This step is taking a bit longer time. Use mat_S for HP computing
-        mat_G = sp.sparse.csr_matrix(mat_G)
+#         mat_G = sp.sparse.csr_matrix(mat_G)
         mat_G.eliminate_zeros()
         return mat_G
 

@@ -21,6 +21,11 @@ compute_ld : compute LD matrix.
         | [--flag_full_ld]
     - Output : LD matrix between a set of SNPs and all other SNPs on the same chromosome.
     
+compute_score : compute LD and DLD scores.
+    - Input : --job | --pgen_file | --prefix_out | --snp_range | [--memory] ｜ [--random_seed]
+        | [--flag_full_ld]
+    - Output : LD matrix between a set of SNPs and all other SNPs on the same chromosome.
+    
 regress : infer parameters \tau and \rho.
     - Input : --job | --pgen_file | --ld_file | --sumstats_file | --annot_file | --prefix_out 
         | [--memory]

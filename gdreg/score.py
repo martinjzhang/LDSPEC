@@ -280,10 +280,12 @@ def compute_score(
             "E": [],
         }
         dic_score.update({"LD:%s" % x: [] for x in AN_list})
-        dic_score.update({"DLD:%s|%s" % (x, y): [] for x in pAN_list for y in AN_list})
-        dic_score.update(
-            {"DLD:%s|%s" % (x, y): [] for x in pAN_hr_list for y in AN_list}
-        )
+        dic_score.update({"DLD:%s" % x: [] for x in pAN_list})
+        dic_score.update({"DLD:%s" % x: [] for x in pAN_hr_list})
+#         dic_score.update({"DLD:%s|%s" % (x, y): [] for x in pAN_list for y in AN_list})
+#         dic_score.update(
+#             {"DLD:%s|%s" % (x, y): [] for x in pAN_hr_list for y in AN_list}
+#         )
         n_snp_chr = dic_score["BP"].shape[0]
         n_block_chr = np.ceil(n_snp_chr / block_size).astype(int)
 
@@ -328,9 +330,7 @@ def compute_score(
                 dic_score["LD:%s" % AN].extend(v_score)
 
             # DLD score
-            # TODO : this line needs to be changed later
-            v_ps_sd = [dic_var_ps[x] if x in dic_var_ps else 1 for x in v_snp_ref_block]
-            v_ps_sd = np.sqrt(np.array(v_ps_sd, dtype=np.float32))
+            # New DLD score for non-interacting pannot
             for pAN in pAN_list:
                 v_pAN = [
                     dic_pannot[pAN][x] if x in dic_pannot[pAN] else sym_non_pAN
@@ -339,15 +339,8 @@ def compute_score(
                 mat_S = gdreg.util.pannot_to_csr(v_pAN)
                 mat_G = mat_S.dot(mat_S.T).toarray()
                 np.fill_diagonal(mat_G, 0)
-
-                for AN in AN_list:
-                    v_annot = [
-                        dic_annot[AN][x] if x in dic_annot[AN] else 0
-                        for x in v_snp_ref_block
-                    ]
-                    v_annot = np.array(v_annot, dtype=np.float32)
-                    v_score = compute_dld_score(mat_ld_block, mat_G, v_annot, v_ps_sd)
-                    dic_score["DLD:%s|%s" % (pAN, AN)].extend(v_score)
+                v_score = (mat_G.dot(mat_ld_block) * mat_ld_block).sum(axis=0)
+                dic_score["DLD:%s" % pAN].extend(v_score)
 
             for pAN in pAN_hr_list:
                 snp_set = set(v_snp_ref_block)
@@ -357,14 +350,46 @@ def compute_score(
                     if (x[0] in snp_set) & (x[1] in snp_set)
                 ]
                 mat_G = gdreg.util.pannot_hr_to_csr(v_snp_ref_block, snp_pair_list)
-                for AN in AN_list:
-                    v_annot = [
-                        dic_annot[AN][x] if x in dic_annot[AN] else 0
-                        for x in v_snp_ref_block
-                    ]
-                    v_annot = np.array(v_annot, dtype=np.float32)
-                    v_score = compute_dld_score(mat_ld_block, mat_G, v_annot, v_ps_sd)
-                    dic_score["DLD:%s|%s" % (pAN, AN)].extend(v_score)
+                v_score = (mat_G.dot(mat_ld_block) * mat_ld_block).sum(axis=0)
+                dic_score["DLD:%s" % pAN].extend(v_score)
+            
+#             # TODO : this line needs to be changed later
+#             v_ps_sd = [dic_var_ps[x] if x in dic_var_ps else 1 for x in v_snp_ref_block]
+#             v_ps_sd = np.sqrt(np.array(v_ps_sd, dtype=np.float32))
+#             for pAN in pAN_list:
+#                 v_pAN = [
+#                     dic_pannot[pAN][x] if x in dic_pannot[pAN] else sym_non_pAN
+#                     for x in v_snp_ref_block
+#                 ]
+#                 mat_S = gdreg.util.pannot_to_csr(v_pAN)
+#                 mat_G = mat_S.dot(mat_S.T).toarray()
+#                 np.fill_diagonal(mat_G, 0)
+
+#                 for AN in AN_list:
+#                     v_annot = [
+#                         dic_annot[AN][x] if x in dic_annot[AN] else 0
+#                         for x in v_snp_ref_block
+#                     ]
+#                     v_annot = np.array(v_annot, dtype=np.float32)
+#                     v_score = compute_dld_score(mat_ld_block, mat_G, v_annot, v_ps_sd)
+#                     dic_score["DLD:%s|%s" % (pAN, AN)].extend(v_score)
+
+#             for pAN in pAN_hr_list:
+#                 snp_set = set(v_snp_ref_block)
+#                 snp_pair_list = [
+#                     x
+#                     for x in dic_pannot_hr[pAN]
+#                     if (x[0] in snp_set) & (x[1] in snp_set)
+#                 ]
+#                 mat_G = gdreg.util.pannot_hr_to_csr(v_snp_ref_block, snp_pair_list)
+#                 for AN in AN_list:
+#                     v_annot = [
+#                         dic_annot[AN][x] if x in dic_annot[AN] else 0
+#                         for x in v_snp_ref_block
+#                     ]
+#                     v_annot = np.array(v_annot, dtype=np.float32)
+#                     v_score = compute_dld_score(mat_ld_block, mat_G, v_annot, v_ps_sd)
+#                     dic_score["DLD:%s|%s" % (pAN, AN)].extend(v_score)
 
         temp_df = pd.DataFrame(dic_score)
         if df_score is None:
