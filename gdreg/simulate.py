@@ -27,22 +27,22 @@ def simulate_snp_effect(
     ----------
     df_annot : pd.DataFrame
         Single-SNP annotation. Should contain all SNPs and columns
-        ['CHR', 'SNP', 'BP', 'AN:AN1', ...]. Should also contain
+        ['CHR', 'SNP', 'BP', 'AN:name', ...]. Should also contain
         'MAF' column if alpha!=-1.
     dic_coef : dic
-        GDReg model coefficients `tau` and `rho`.
+        GDREG model coefficients `tau` and `rho`.
 
         - dic[AN] : `tau` for AN `c` defined as
             `Var(\beta_i) = \sum_c a_ci tau_c`
-        - dic[pAN|AN] : `rho` for pAN `k` and AN `c` defined as
-            `Cor(\beta_i, \beta_j) = \sum_{k,c} G_{k,ij} * 0.5 * [a_ci + a_cj] \rho_kc`
+        - dic[pAN|AN] : `rho` for pAN `l` defined as (note we simulate cor instead of cov here)
+            `Cor(\beta_i, \beta_j) = \sum_{k,c} G_{k,ij} * 0.5 * [a_ci + a_cj] \rho_l`
 
     df_pannot_list : list of pd.DataFrame
         Each element corresponds to SNP-pair annotation. Must contain
-        ['CHR', 'SNP', 'BP', 'pAN:pAN1'] columns.
+        ['CHR', 'SNP', 'BP', 'pAN:name'] columns.
     df_pannot_hr_list : list of pd.DataFrame
         Each element corresponds to a high-res SNP-pair annotation. Must contain
-        ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:pAN1'] columns.
+        ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:name'] columns.
     h2g : float, default=0.5
         Overall heritability, equal to `sum(effect**2)`.
     alpha : float, default=-0.38
@@ -71,7 +71,7 @@ def simulate_snp_effect(
     np.random.seed(random_seed)
     start_time = time.time()
 
-    # Get info and add 0's for GDReg coefficients not in dic_coef
+    # Get info and add 0's for GDREG coefficients not in dic_coef
     CHR_list = sorted(set(df_annot["CHR"]))
     AN_list = [x for x in df_annot if x.startswith("AN:")]
     pAN_list = [[y for y in x if y.startswith("pAN")][0] for x in pannot_list]
@@ -79,12 +79,7 @@ def simulate_snp_effect(
 
     for AN in [x for x in AN_list if x not in dic_coef]:
         dic_coef[AN] = 0
-    for pAN, AN in [
-        [x, y]
-        for x in pAN_list + pAN_hr_list
-        for y in AN_list
-        if "%s|%s" % (x, y) not in dic_coef
-    ]:
+    for pAN in [x for x in pAN_list if x not in dic_coef]:
         dic_coef["%s|%s" % (pAN, AN)] = 0
 
     # df_effect
@@ -162,15 +157,7 @@ def simulate_snp_effect(
                 mat_S = gdreg.util.pannot_to_csr(v_pAN)
                 mat_G = mat_S.dot(mat_S.T).toarray()
                 np.fill_diagonal(mat_G, 0)
-
-                for i_AN, AN in enumerate(AN_list):
-                    temp_mat = (
-                        0.5
-                        * np.outer(mat_annot[:, i_AN], np.ones(n_snp_block))
-                        * dic_coef["%s|%s" % (pAN, AN)]
-                        * mat_G
-                    )
-                    mat_cov += temp_mat + temp_mat.T
+                mat_cov += mat_G * dic_coef[pAN]
 
             for pAN in pAN_hr_list:
                 snp_set = set(v_snp_block)
@@ -182,15 +169,7 @@ def simulate_snp_effect(
                 mat_G = gdreg.util.pannot_hr_to_csr(
                     v_snp_block, snp_pair_list
                 ).toarray()
-
-                for i_AN, AN in enumerate(AN_list):
-                    temp_mat = (
-                        0.5
-                        * np.outer(mat_annot[:, i_AN], np.ones(n_snp_block))
-                        * dic_coef["%s|%s" % (pAN, AN)]
-                        * mat_G
-                    )
-                    mat_cov += temp_mat + temp_mat.T
+                mat_cov += mat_G * dic_coef[pAN]
 
             # Scale by variance
             v_var_block = df_effect.loc[v_snp_block, "VAR"].values
@@ -281,8 +260,27 @@ def summarize_snp_effect(
         pAN = [x for x in temp_df if x.startswith("pAN:")][0]
         dic_pannot_hr[pAN] = [(x, y) for x, y in zip(temp_df["SNP"], temp_df["pSNP"])]
 
+    dic_mat_G = {}
+    for pAN in pAN_list:
+        v_pAN = [
+            dic_pannot[pAN][x] if x in dic_pannot[pAN] else sym_non_pAN
+            for x in df_snp["SNP"]
+        ]
+        mat_G = gdreg.util.pannot_to_csr(
+            v_pAN, sym_non_pAN=sym_non_pAN, flag_matS=False
+        )
+        dic_mat_G[pAN] = mat_G.copy()
+
+    snp_set = set(df_snp["SNP"].values)
+    for pAN in pAN_hr_list:
+        snp_pair_list = [
+            x for x in dic_pannot_hr[pAN] if (x[0] in snp_set) & (x[1] in snp_set)
+        ]
+        mat_G = gdreg.util.pannot_hr_to_csr(df_snp["SNP"].values, snp_pair_list)
+        dic_mat_G[pAN] = mat_G.copy()
+
     if verbose:
-        print("# Call: gdreg.simulate.simulate_snp_effect")
+        print("# Call: gdreg.simulate.summarize_snp_effect")
         print("    %d SNPs" % n_snp)
         print("    Single-SNP annots : %s" % ", ".join(AN_list))
         print(
@@ -291,38 +289,45 @@ def summarize_snp_effect(
         )
 
     # Summary
-    col_list = ["annot", "n_snp", "p_causal", "tau", "h2_ps", "h2"]
-    for pAN in pAN_list + pAN_hr_list:
-        col_list += ["%s|%s" % (x, pAN) for x in ["rho", "r2_ps"]]
-    df_summary = pd.DataFrame(
+    v_eff = (df_snp["EFF"].values != 0) * 1
+    df_sum_tau = pd.DataFrame(
         index=AN_list,
-        columns=col_list,
-        data=0,
+        data={
+            "annot": AN_list,
+            "size": [(df_snp[x] == 1).sum() for x in AN_list],
+            "p_causal": [v_eff[df_snp[x] == 1].mean() for x in AN_list],
+            "coef": np.nan,
+            "aggeff": np.nan,
+        },
     )
 
-    # Summary : basic
-    df_summary["annot"] = df_summary.index
-    df_summary["n_snp"] = [(df_snp[x] != 0).sum() for x in AN_list]
-    df_summary["p_causal"] = [
-        (df_snp.loc[df_snp[x] != 0, "EFF"] != 0).mean() for x in AN_list
-    ]
+    df_sum_rho = pd.DataFrame(
+        index=pAN_list + pAN_hr_list,
+        data={
+            "annot": pAN_list + pAN_hr_list,
+            "size": [dic_mat_G[x].sum() for x in pAN_list + pAN_hr_list],
+            "p_causal": [
+                dic_mat_G[x].dot(v_eff).T.dot(v_eff) / dic_mat_G[x].sum()
+                for x in pAN_list + pAN_hr_list
+            ],
+            "coef": np.nan,
+            "aggeff": np.nan,
+        },
+    )
 
     # Summary : variance terms
     v_y = df_snp["EFF"].values ** 2
     mat_X = df_snp[AN_list].values
-    df_summary["tau"] = gdreg.util.reg(v_y, mat_X)
+    df_sum_tau["coef"] = gdreg.util.reg(v_y, mat_X)
 
     for AN in AN_list:
         if len(set(df_snp[AN])) > 2:
             continue
-        # h2_ps and h2
-        temp_v = df_snp.loc[df_snp[AN] == 1, AN_list].mean(axis=0).values
-        df_summary.loc[AN, "h2_ps"] = (temp_v * df_summary["tau"]).sum()
-        df_summary.loc[AN, "h2"] = (
-            df_summary.loc[AN, "h2_ps"] * df_summary.loc[AN, "n_snp"]
-        )
+        # aggeff (h2)
+        temp_v = df_snp.loc[df_snp[AN] == 1, AN_list].sum(axis=0).values
+        df_sum_tau.loc[AN, "aggeff"] = (temp_v * df_sum_tau["coef"]).sum()
 
-    # Summary : correlation terms
+    # Summary : covariance terms
     df_reg = None
     for CHR in CHR_list:
         v_snp_chr = df_snp.loc[df_effect["CHR"] == CHR, "SNP"].values
@@ -341,13 +346,6 @@ def summarize_snp_effect(
                 np.triu_indices(n_snp_block, k=1)
             ]
 
-            # v_scale from per-SNP variance
-            v_var = np.zeros(n_snp_block)
-            for i_AN, AN in enumerate(AN_list):
-                v_var = v_var + mat_annot[:, i_AN] * df_summary.loc[AN, "tau"]
-            v_sd = np.sqrt(v_var.clip(min=0))
-            v_scale = np.outer(v_sd, v_sd)[np.triu_indices(n_snp_block, k=1)]
-
             # Regressors from .pannot
             for pAN in pAN_list:
                 v_pAN = [
@@ -357,15 +355,7 @@ def summarize_snp_effect(
                 mat_S = gdreg.util.pannot_to_csr(v_pAN)
                 mat_G = mat_S.dot(mat_S.T).toarray()
                 np.fill_diagonal(mat_G, 0)
-
-                for i_AN, AN in enumerate(AN_list):
-                    temp_mat = (
-                        0.5 * np.outer(mat_annot[:, i_AN], np.ones(n_snp_block)) * mat_G
-                    )
-                    temp_mat = temp_mat + temp_mat.T
-                    temp_dic_reg["%s|%s" % (pAN, AN)] = (
-                        temp_mat[np.triu_indices(n_snp_block, k=1)] * v_scale
-                    )
+                temp_dic_reg[pAN] = mat_G[np.triu_indices(n_snp_block, k=1)] * 1
 
             for pAN in pAN_hr_list:
                 snp_set = set(v_snp_block)
@@ -377,15 +367,7 @@ def summarize_snp_effect(
                 mat_G = gdreg.util.pannot_hr_to_csr(
                     v_snp_block, snp_pair_list
                 ).toarray()
-
-                for i_AN, AN in enumerate(AN_list):
-                    temp_mat = (
-                        0.5 * np.outer(mat_annot[:, i_AN], np.ones(n_snp_block)) * mat_G
-                    )
-                    temp_mat = temp_mat + temp_mat.T
-                    temp_dic_reg["%s|%s" % (pAN, AN)] = (
-                        temp_mat[np.triu_indices(n_snp_block, k=1)] * v_scale
-                    )
+                temp_dic_reg[pAN] = mat_G[np.triu_indices(n_snp_block, k=1)] * 1
 
             temp_df = pd.DataFrame(data=temp_dic_reg)
             if df_reg is None:
@@ -394,21 +376,16 @@ def summarize_snp_effect(
                 df_reg = pd.concat([df_reg, temp_df], axis=0)
 
     reg_list = [x for x in df_reg if x != "beta_i_beta_j"]
-    v_rho = gdreg.util.reg(df_reg["beta_i_beta_j"], df_reg[reg_list])
-    for i in range(len(reg_list)):
-        pAN, AN = reg_list[i].split("|")
-        df_summary.loc[AN, "rho|%s" % pAN] = v_rho[i]
-
+    df_sum_rho["coef"] = gdreg.util.reg(df_reg["beta_i_beta_j"], df_reg[reg_list])
     for pAN in pAN_list + pAN_hr_list:
-        for AN in AN_list:
-            if len(set(df_snp[AN])) > 2:
-                continue
-            # r2_ps
-            temp_v = df_snp.loc[df_snp[AN] == 1, AN_list].mean(axis=0).values
-            df_summary.loc[AN, "r2_ps|%s" % pAN] = (
-                df_summary["rho|%s" % pAN] * temp_v
-            ).sum()
+        # aggeff (cov)
+        n_snp_pair = df_sum_rho.loc[pAN, "size"]
+        temp_v = np.array(
+            [(dic_mat_G[pAN] * dic_mat_G[x]).sum() for x in pAN_list + pAN_hr_list]
+        )
+        df_sum_rho.loc[pAN, "aggeff"] = (temp_v * df_sum_rho["coef"]).sum()
 
+    df_summary = pd.concat([df_sum_tau, df_sum_rho], axis=0)
     if verbose:
         print(df_summary)
         print("    Completed, time=%0.1fs" % (time.time() - start_time))
@@ -528,9 +505,9 @@ def simulate_phen(
         sample_list_chr = ["%s:%s" % (x, y) for x, y in zip(fid_list, iid_list)]
         temp_df = pd.DataFrame(index=sample_list_chr, data={CHR: v_phen})
         df_phen = df_phen.join(temp_df)
-    
+
     v_e = np.random.randn(df_phen.shape[0]).astype(np.float32) * np.sqrt(h2e)
-    df_phen["TRAIT"] = df_phen[CHR_list].sum(axis=1) + v_e 
+    df_phen["TRAIT"] = df_phen[CHR_list].sum(axis=1) + v_e
     df_phen = df_phen.loc[sorted(sample_set_common), ["FID", "IID", "TRAIT"]].copy()
 
     if verbose:

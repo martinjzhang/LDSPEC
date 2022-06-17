@@ -35,7 +35,7 @@ def compute_ld(
 
     Returns
     -------
-    mat_ld : np.array(dtype=np.float32) or sp.sparse.csr(dtype=np.float32)
+    mat_ld : np.array(dtype=np.float32)
         LD matrix of shape (n_snp_ref, n_snp_tar).
     """
 
@@ -77,8 +77,6 @@ def compute_ld(
         mem_ld + mem_geno_ps * 2048 + 20,
     )
     assert block_size_tot > 2048, err_msg
-
-    #     block_size_tar, block_size_ref, block_size_sample = 27, 56, 19
 
     n_block_tar = np.ceil(n_snp_tar / block_size_tar).astype(int)
     n_block_ref = np.ceil(n_snp_ref / block_size_ref).astype(int)
@@ -166,10 +164,10 @@ def compute_score(
     pannot_hr_list=[],
     sym_non_pAN="non-pAN",
     win_size=int(1e7),
+    snp_range=None,
     memory=128,
     verbose=False,
     verbose_prefix="",
-    dic_var_ps={},
 ):
 
     """
@@ -199,11 +197,13 @@ def compute_score(
         Symbol for SNPs not in the SNP-pair annotation.
     win_size : int, defualt=1e7
         Window size for computing LD and DLD scores.
+    snp_range : list of int
+        Genomic range of SNPs for computing the scores. (CHR,ind_start,ind_end).
+        If provide, only only scores for this range.
     memory : int, default=128
         Memory to use (in MB).
     verbose : bool, default=False
         If to output messages.
-    dic_var_ps :
 
     Returns
     -------
@@ -219,7 +219,10 @@ def compute_score(
     start_time = time.time()
 
     # SNP info : check consistency between dic_data and dic_ld
-    CHR_list = sorted(set(dic_data))
+    if snp_range is None:
+        CHR_list = sorted(set(dic_data))
+    else:
+        CHR_list = [snp_range[0]]
     for CHR in CHR_list:
         assert dic_ld[CHR].shape[0] == dic_data[CHR]["pvar"].shape[0], (
             "dic_ld does not match dimension of dic_data for CHR%d" % CHR
@@ -248,65 +251,60 @@ def compute_score(
 
     # block_size
     # TODO : determine size
-    block_size = 100
+    block_size = 500
 
     if verbose:
-        print(verbose_prefix + "# Call: gdreg.score.compute_score")
+        print("# Call: gdreg.score.compute_score")
         temp_str = ", ".join(
             ["CHR%d (%d SNPs)" % (x, dic_ld[x].shape[0]) for x in CHR_list]
         )
+        print("    %d SNPs from %d CHRs: %s" % (len(v_snp), len(CHR_list), temp_str))
+        if snp_range is not None:
+            print("    Range: chr=%d, start=%d, end=%d " % snp_range)
+        print("    Single-SNP annots : %s" % ", ".join(AN_list))
         print(
-            verbose_prefix
-            + "    %d SNPs from %d CHRs: %s" % (len(v_snp), len(CHR_list), temp_str)
-        )
-        print(verbose_prefix + "    Single-SNP annots : %s" % ", ".join(AN_list))
-        print(
-            verbose_prefix
-            + "    SNP-pair annots : %s"
+            "    SNP-pair annots : %s"
             % ", ".join(pAN_list + ["%s (hr)" % x for x in pAN_hr_list])
         )
-        print(
-            verbose_prefix
-            + "    win_size=%0.1fMB, memory=%dMB" % (win_size / 1e6, memory)
-        )
+        print("    win_size=%0.1fMB, memory=%dMB" % (win_size / 1e6, memory))
 
     # Compute score
     df_score = None
     for CHR in CHR_list:
-        dic_score = {
-            "CHR": dic_data[CHR]["pvar"]["CHR"].values,
-            "SNP": dic_data[CHR]["pvar"]["SNP"].values,
-            "BP": dic_data[CHR]["pvar"]["BP"].values,
-            "E": [],
-        }
+
+        dic_score = {"CHR": [], "SNP": [], "BP": [], "E": []}
         dic_score.update({"LD:%s" % x: [] for x in AN_list})
         dic_score.update({"DLD:%s" % x: [] for x in pAN_list})
         dic_score.update({"DLD:%s" % x: [] for x in pAN_hr_list})
-#         dic_score.update({"DLD:%s|%s" % (x, y): [] for x in pAN_list for y in AN_list})
-#         dic_score.update(
-#             {"DLD:%s|%s" % (x, y): [] for x in pAN_hr_list for y in AN_list}
-#         )
-        n_snp_chr = dic_score["BP"].shape[0]
+
+        v_snp_chr = dic_data[CHR]["pvar"]["SNP"].values
+        v_bp_chr = dic_data[CHR]["pvar"]["BP"].values
+        n_snp_chr = v_snp_chr.shape[0]
         n_block_chr = np.ceil(n_snp_chr / block_size).astype(int)
 
         for i_block in range(n_block_chr):
             ind_s = i_block * block_size
             ind_e = min((i_block + 1) * block_size, n_snp_chr)
             ind_s_ref = np.searchsorted(
-                dic_score["BP"], dic_score["BP"][ind_s] - win_size/2, side="left"
+                v_bp_chr, v_bp_chr[ind_s] - win_size / 2, side="left"
             )
             ind_e_ref = np.searchsorted(
-                dic_score["BP"], dic_score["BP"][ind_e - 1] + win_size/2, side="right"
+                v_bp_chr, v_bp_chr[ind_e - 1] + win_size / 2, side="right"
             )
 
-            # TODO : do a toarray later (sp.sparse)
-            #             mat_ld_block = dic_ld[CHR][
-            #                 ind_s_ref:ind_e_ref, ind_s:ind_e
-            #             ]  # (n_ref, n_tar)
+            if snp_range is not None:
+                if (ind_s > snp_range[2]) | (ind_e < snp_range[1]):
+                    continue
+
+            # Basic info
+            dic_score["CHR"].extend(dic_data[CHR]["pvar"]["CHR"].values[ind_s:ind_e])
+            dic_score["SNP"].extend(dic_data[CHR]["pvar"]["SNP"].values[ind_s:ind_e])
+            dic_score["BP"].extend(dic_data[CHR]["pvar"]["BP"].values[ind_s:ind_e])
+
             mat_ld_block = dic_ld[CHR][:, ind_s:ind_e].toarray()[
                 ind_s_ref:ind_e_ref, :
             ]  # (n_ref, n_tar)
-            v_snp_ref_block = list(dic_score["SNP"][ind_s_ref:ind_e_ref])
+            v_snp_ref_block = list(v_snp_chr[ind_s_ref:ind_e_ref])
 
             # E score : r_ii
             n_dif = ind_s - ind_s_ref
@@ -352,50 +350,17 @@ def compute_score(
                 mat_G = gdreg.util.pannot_hr_to_csr(v_snp_ref_block, snp_pair_list)
                 v_score = (mat_G.dot(mat_ld_block) * mat_ld_block).sum(axis=0)
                 dic_score["DLD:%s" % pAN].extend(v_score)
-            
-#             # TODO : this line needs to be changed later
-#             v_ps_sd = [dic_var_ps[x] if x in dic_var_ps else 1 for x in v_snp_ref_block]
-#             v_ps_sd = np.sqrt(np.array(v_ps_sd, dtype=np.float32))
-#             for pAN in pAN_list:
-#                 v_pAN = [
-#                     dic_pannot[pAN][x] if x in dic_pannot[pAN] else sym_non_pAN
-#                     for x in v_snp_ref_block
-#                 ]
-#                 mat_S = gdreg.util.pannot_to_csr(v_pAN)
-#                 mat_G = mat_S.dot(mat_S.T).toarray()
-#                 np.fill_diagonal(mat_G, 0)
-
-#                 for AN in AN_list:
-#                     v_annot = [
-#                         dic_annot[AN][x] if x in dic_annot[AN] else 0
-#                         for x in v_snp_ref_block
-#                     ]
-#                     v_annot = np.array(v_annot, dtype=np.float32)
-#                     v_score = compute_dld_score(mat_ld_block, mat_G, v_annot, v_ps_sd)
-#                     dic_score["DLD:%s|%s" % (pAN, AN)].extend(v_score)
-
-#             for pAN in pAN_hr_list:
-#                 snp_set = set(v_snp_ref_block)
-#                 snp_pair_list = [
-#                     x
-#                     for x in dic_pannot_hr[pAN]
-#                     if (x[0] in snp_set) & (x[1] in snp_set)
-#                 ]
-#                 mat_G = gdreg.util.pannot_hr_to_csr(v_snp_ref_block, snp_pair_list)
-#                 for AN in AN_list:
-#                     v_annot = [
-#                         dic_annot[AN][x] if x in dic_annot[AN] else 0
-#                         for x in v_snp_ref_block
-#                     ]
-#                     v_annot = np.array(v_annot, dtype=np.float32)
-#                     v_score = compute_dld_score(mat_ld_block, mat_G, v_annot, v_ps_sd)
-#                     dic_score["DLD:%s|%s" % (pAN, AN)].extend(v_score)
 
         temp_df = pd.DataFrame(dic_score)
         if df_score is None:
             df_score = temp_df.copy()
         else:
             df_score = pd.concat([df_score, temp_df], axis=0)
+
+    if snp_range is not None:
+        CHR, START, END = snp_range
+        snp_list = dic_data[CHR]["pvar"]["SNP"].values[START:END]
+        df_score = df_score.loc[df_score["SNP"].isin(snp_list)]
 
     if verbose:
         print(

@@ -4,6 +4,7 @@ import scipy as sp
 from scipy import sparse
 import pgenlib as pg
 import os
+import re
 import warnings
 import gdreg
 import psutil
@@ -552,30 +553,112 @@ def read_annot(fpath):
     return df_annot
 
 
+def read_ld(fpath):
+    """
+    Read LD files.
+
+        - `_fullld.npy` : full_ld matrix, np.array(dtype=np.float32)
+        - `_ld.npz` : ld matrix with SNPs in 10MB window, sp.sparse.csc_matrix(dtype=np.float32)
+
+    Parameters
+    ----------
+    fpath: str
+        LD file path.
+
+    Returns
+    -------
+    mat_ld : np.array(dtype=np.float32) or sp.sparse.csc_matrix(dtype=np.float32)
+        LD matrix of dimension (n_ref_snp, n_snp)
+    dic_range : dict
+        
+        - dic_range['chr'] : chromosome
+        - dic_range['start'] : start position
+        - dic_range['end'] : end position
+        - dic_range['chr_ref'] : reference chromosome list (List)      
+    """
+    
+    # Check fpath
+    err_msg = "fpath should end with one of ['_fullld.npy', '_ld.npz'] : %s" % fpath
+    assert fpath.endswith("_fullld.npy") | fpath.endswith("_ld.npz"), err_msg
+    
+    if fpath.endswith("_fullld.npy"):
+        mat_ld = np.load(fpath)
+        temp_str = [x for x in fpath.split('.') if x.endswith('_fullld')][0]
+        dic_range = parse_snp_range(temp_str)
+        
+    if fpath.endswith("_ld.npz"):
+        mat_ld = sp.sparse.load_npz(fpath)
+        temp_str = [x for x in fpath.split('.') if x.endswith('_ld')][0]
+        dic_range = parse_snp_range(temp_str)
+
+    return mat_ld,dic_range
+
+
 def parse_snp_range(snp_range):
-    """Get range of SNPs to analyze. Example: 'chr=1|start=0|end=500|chr_ref=2'"""
+    """Get range of SNPs to analyze. 
+    
+    Parameters
+    ----------
+    snp_range: str
+        Example: 'c1_s0_e2000_r1'
 
-    dic_snp_range = {x: None for x in ["chr", "start", "end", "chr_ref"]}
+    Returns
+    -------
+    dic_range : dict
+        
+        - dic_range['chr'] : chromosome
+        - dic_range['start'] : start position
+        - dic_range['end'] : end position
+        - dic_range['chr_ref'] : reference chromosome list (List)
+    """
 
-    for x in snp_range.split("|"):
+    dic_range = {x: None for x in ["chr", "start", "end", "chr_ref"]}
 
-        if x.startswith("chr="):
-            dic_snp_range["chr"] = int(x.replace("chr=", "").strip())
+    for x in snp_range.split("_"):
 
-        if x.startswith("start="):
-            dic_snp_range["start"] = int(x.replace("start=", "").strip())
+        if x[0] == "c":
+            dic_range["chr"] = int(x.replace("c", "").strip())
 
-        if x.startswith("end="):
-            dic_snp_range["end"] = int(x.replace("end=", "").strip())
+        if x[0] == "s":
+            dic_range["start"] = int(x.replace("s", "").strip())
 
-        if x.startswith("chr_ref="):
-            temp_str = x.replace("chr_ref=", "").strip()
+        if x[0] == "e":
+            dic_range["end"] = int(x.replace("e", "").strip())
+
+        if x[0] == "r":
+            temp_str = x.replace("r", "").strip()
             if temp_str == "all":
-                dic_snp_range["chr_ref"] = list(np.arange(1, 23))
+                dic_range["chr_ref"] = list(np.arange(1, 23))
             else:
-                dic_snp_range["chr_ref"] = [int(x) for x in temp_str.split(",")]
+                dic_range["chr_ref"] = [int(x) for x in temp_str.split(",")]
 
-    return dic_snp_range
+    return dic_range
+
+
+# def parse_snp_range(snp_range):
+#     """Get range of SNPs to analyze. Example: 'chr=1|start=0|end=500|chr_ref=2'"""
+
+#     dic_snp_range = {x: None for x in ["chr", "start", "end", "chr_ref"]}
+
+#     for x in snp_range.split("|"):
+
+#         if x.startswith("chr="):
+#             dic_snp_range["chr"] = int(x.replace("chr=", "").strip())
+
+#         if x.startswith("start="):
+#             dic_snp_range["start"] = int(x.replace("start=", "").strip())
+
+#         if x.startswith("end="):
+#             dic_snp_range["end"] = int(x.replace("end=", "").strip())
+
+#         if x.startswith("chr_ref="):
+#             temp_str = x.replace("chr_ref=", "").strip()
+#             if temp_str == "all":
+#                 dic_snp_range["chr_ref"] = list(np.arange(1, 23))
+#             else:
+#                 dic_snp_range["chr_ref"] = [int(x) for x in temp_str.split(",")]
+
+#     return dic_snp_range
 
 
 ################################################################################
@@ -583,7 +666,7 @@ def parse_snp_range(snp_range):
 ################################################################################
 def get_cli_head():
     MASTHEAD = "******************************************************************************\n"
-    MASTHEAD += "* Gene-level directional effect regression (GDReg)\n"
+    MASTHEAD += "* Gene-level directional effect regression (GDREG)\n"
     MASTHEAD += "* Version %s\n" % gdreg.__version__
     MASTHEAD += "* Martin Jinye Zhang\n"
     MASTHEAD += "* HSPH / Broad Institute\n"
