@@ -11,11 +11,11 @@ def compute_ld(
     dic_data,
     pos_tar,
     pos_ref,
-    memory=128,
+    memory=512,
     verbose=False,
 ):
     """
-    Compute the ld matrix for two sets of SNPs
+    Compute the ld matrix for two sets of SNPs.
 
     Parameters
     ----------
@@ -165,7 +165,7 @@ def compute_score(
     sym_non_pAN="non-pAN",
     win_size=int(1e7),
     snp_range=None,
-    memory=128,
+    memory=512,
     verbose=False,
     verbose_prefix="",
 ):
@@ -208,7 +208,7 @@ def compute_score(
     Returns
     -------
     df_score : pd.DataFrame
-        GDreg DLD scores, with columns ['CHR', 'SNP', 'BP', 'LD:AN1', 'LD:AN2', 'LD:E', 'DLD:PAN:AN1', 'DLD:PAN:AN2'].
+        GDREG LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'LD:AN1', 'LD:AN2', 'LD:E', 'DLD:PAN:AN1', 'DLD:PAN:AN2'].
 
     TODO
     ----

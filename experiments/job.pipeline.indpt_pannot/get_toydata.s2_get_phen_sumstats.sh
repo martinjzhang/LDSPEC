@@ -12,13 +12,15 @@
 PGEN_FILE=/n/groups/price/martin/WES_analysis/toy_10K/chr@_v1.SPB.hg19.toy_10K
 
 # # compute_phen
-# for i_rep in {0..19}
+# for i_line in {2..180}
+# # for i_line in 1
 # do
 
-# EFF_FILE=/n/groups/price/martin/WES_analysis/toy_10K/sanity_rep${i_rep}.eff.gz
-# PREFIX_OUT=/n/groups/price/martin/WES_analysis/toy_10K/sanity_rep${i_rep}
+# TRAIT=$( head -n $i_line "/n/groups/price/martin/WES_analysis/toy_10K/trait_simu_debug/trait_list.txt" | tail -1 )
+# EFF_FILE=/n/groups/price/martin/WES_analysis/toy_10K/trait_simu_debug/${TRAIT}.eff.gz
+# PREFIX_OUT=/n/groups/price/martin/WES_analysis/toy_10K/trait_simu_debug/${TRAIT}
 
-# sbatch -p short -t 0-00:15 -n 1 -c 1 --mem=16000 --open-mode=truncate -o $PREFIX_OUT.compute_phen.sbatch.log --wrap " \
+# sbatch -p short -t 0-00:05 -n 1 -c 1 --mem=4000 --open-mode=truncate -o $PREFIX_OUT.compute_phen.sbatch.log --wrap " \
 # python3 /home/jz286/WES_analysis/GDReg/run_simulation.py\
 #     --job compute_phen\
 #     --pgen_file $PGEN_FILE\
@@ -28,12 +30,14 @@ PGEN_FILE=/n/groups/price/martin/WES_analysis/toy_10K/chr@_v1.SPB.hg19.toy_10K
 # done
 
 # compute_sumstats
-for i_rep in {0..19}
+for i_line in {2..180}
+# for i_line in 1
 do
-PHEN_FILE=/n/groups/price/martin/WES_analysis/toy_10K/sanity_rep${i_rep}.phen
-PREFIX_OUT=/n/groups/price/martin/WES_analysis/toy_10K/sanity_rep${i_rep}
+TRAIT=$( head -n $i_line "/n/groups/price/martin/WES_analysis/toy_10K/trait_simu_debug/trait_list.txt" | tail -1 )
+PHEN_FILE=/n/groups/price/martin/WES_analysis/toy_10K/trait_simu_debug/${TRAIT}.phen
+PREFIX_OUT=/n/groups/price/martin/WES_analysis/toy_10K/trait_simu_debug/${TRAIT}
 
-sbatch -p short -t 0-00:15 -n 1 -c 1 --mem=16000 --open-mode=truncate -o $PREFIX_OUT.compute_sumstats.sbatch.log --wrap " \
+sbatch -p short -t 0-00:05 -n 1 -c 1 --mem=4000 --open-mode=truncate -o $PREFIX_OUT.compute_sumstats.sbatch.log --wrap " \
 python3 /home/jz286/WES_analysis/GDReg/run_simulation.py\
     --job compute_sumstats\
     --pgen_file $PGEN_FILE\

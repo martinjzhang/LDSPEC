@@ -37,7 +37,6 @@ regress : infer parameters \tau and \rho.
     
 TODO
 ----
-- load dic_ld only when using it
 
 """
 
@@ -145,7 +144,7 @@ def main(args):
         print("    n_snp=%d, n_snp_ref=%d" % (mat_ld.shape[1], mat_ld.shape[0]))
         print("    LD info loaded, matching --pgen_file")
         print("    " + gdreg.util.get_sys_info(sys_start_time))
-       
+
     # Load --score_file
     if JOB in ["regress"]:
         print("# Loading --score_file")
@@ -153,20 +152,21 @@ def main(args):
         print("    find %d score files" % len(flist))
         df_score = None
         for fpath in flist:
-            temp_df = pd.read_csv(fpath, sep='\t', index_col=None)
+            temp_df = pd.read_csv(fpath, sep="\t", index_col=None)
 
             if df_score is None:
                 df_score = temp_df.copy()
             else:
                 df_score = pd.concat([df_score, temp_df], axis=0)
 
-        df_score.sort_values(['CHR', 'BP'], inplace=True)
+        df_score.sort_values(["CHR", "BP"], inplace=True)
         LD_list = [x for x in df_score if x.startswith("LD:")]
         DLD_list = [x for x in df_score if x.startswith("DLD:")]
 
-        print("    score file loaded for %d SNPs, %d LD scores, %d DLD scores" % (
-            df_score.shape[0], len(LD_list), len(DLD_list)
-        ))
+        print(
+            "    score file loaded for %d SNPs, %d LD scores, %d DLD scores"
+            % (df_score.shape[0], len(LD_list), len(DLD_list))
+        )
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
     # Load --sumstats_file
@@ -338,12 +338,18 @@ def main(args):
         )
 
         # Store the entire file and a summary df
-        dbfile = open(PREFIX_OUT+'.pickle', 'wb')      
-        pickle.dump(dic_res, dbfile)                     
+        dbfile = open(PREFIX_OUT + ".pickle", "wb")
+        pickle.dump(dic_res, dbfile)
         dbfile.close()
-        dic_res[0]['summary']['tau'].to_csv(PREFIX_OUT+'.tau.tsv', sep='\t', index=False)
-        dic_res[1]['summary']['tau'].to_csv(PREFIX_OUT+'.joint_tau.tsv', sep='\t', index=False)
-        dic_res[1]['summary']['rho'].to_csv(PREFIX_OUT+'.joint_rho.tsv', sep='\t', index=False)
+        dic_res[0]["summary"]["tau"].to_csv(
+            PREFIX_OUT + ".tau.tsv", sep="\t", index=False
+        )
+        dic_res[1]["summary"]["tau"].to_csv(
+            PREFIX_OUT + ".joint_tau.tsv", sep="\t", index=False
+        )
+        dic_res[1]["summary"]["rho"].to_csv(
+            PREFIX_OUT + ".joint_rho.tsv", sep="\t", index=False
+        )
 
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 

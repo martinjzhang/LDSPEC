@@ -31,7 +31,7 @@ def main(args):
     LEGAL_JOB_LIST = ["compute_phen", "compute_sumstats"]
     err_msg = "# run_gdreg: --job=%s not supported" % JOB
     assert JOB in LEGAL_JOB_LIST, err_msg
-    
+
     if (EFF_FILE is None) & (JOB in ["compute_phen"]):
         raise ValueError("# run_simulation.py: --eff_file required for --job=%s" % JOB)
     if (PHEN_FILE is None) & (JOB in ["compute_sumstats"]):
