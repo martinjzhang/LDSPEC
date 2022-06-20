@@ -162,6 +162,7 @@ def compute_score(
     df_annot,
     pannot_list=[],
     pannot_hr_list=[],
+    cross_term=False,
     sym_non_pAN="non-pAN",
     win_size=int(1e7),
     snp_range=None,
@@ -193,6 +194,7 @@ def compute_score(
     df_pannot_hr_list : list of pd.DataFrame, default=[]
         Each element corresponds to a high-res SNP-pair annotation. Must contain
         ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:pAN1'] columns.
+    cross_term : bool, default=False
     sym_non_pAN : str, default='non-pAN'
         Symbol for SNPs not in the SNP-pair annotation.
     win_size : int, defualt=1e7
@@ -328,17 +330,16 @@ def compute_score(
                 dic_score["LD:%s" % AN].extend(v_score)
 
             # DLD score
-            # New DLD score for non-interacting pannot
+            dic_mat_G = {}
             for pAN in pAN_list:
                 v_pAN = [
                     dic_pannot[pAN][x] if x in dic_pannot[pAN] else sym_non_pAN
                     for x in v_snp_ref_block
                 ]
                 mat_S = gdreg.util.pannot_to_csr(v_pAN)
-                mat_G = mat_S.dot(mat_S.T).toarray()
-                np.fill_diagonal(mat_G, 0)
-                v_score = (mat_G.dot(mat_ld_block) * mat_ld_block).sum(axis=0)
-                dic_score["DLD:%s" % pAN].extend(v_score)
+                dic_mat_G[pAN] = mat_S.dot(mat_S.T).toarray()
+                np.fill_diagonal(dic_mat_G[pAN], 0)
+                dic_mat_G[pAN] = sp.sparse.csr_matrix(dic_mat_G[pAN])
 
             for pAN in pAN_hr_list:
                 snp_set = set(v_snp_ref_block)
@@ -347,9 +348,85 @@ def compute_score(
                     for x in dic_pannot_hr[pAN]
                     if (x[0] in snp_set) & (x[1] in snp_set)
                 ]
-                mat_G = gdreg.util.pannot_hr_to_csr(v_snp_ref_block, snp_pair_list)
-                v_score = (mat_G.dot(mat_ld_block) * mat_ld_block).sum(axis=0)
+                dic_mat_G[pAN] = gdreg.util.pannot_hr_to_csr(
+                    v_snp_ref_block, snp_pair_list
+                )
+
+            for pAN in dic_mat_G:
+                v_score = (dic_mat_G[pAN].dot(mat_ld_block) * mat_ld_block).sum(axis=0)
                 dic_score["DLD:%s" % pAN].extend(v_score)
+
+            # Cross terms
+            # For pairs of target SNPs within the block with non-zero pannot
+            if cross_term:
+                # ind_pair
+                v_snp_tar_block = list(v_snp_chr[ind_s:ind_e])
+                v_bp_tar_block = list(v_bp_chr[ind_s:ind_e])
+                n_snp_tar_block = len(v_snp_tar_block)
+                mat_pair = np.zeros([n_snp_tar_block, n_snp_tar_block], dtype=bool)
+                n_dif = ind_s - ind_s_ref
+                for pAN in dic_mat_G:
+                    mat_pair = (
+                        mat_pair
+                        | dic_mat_G[pAN].toarray()[
+                            n_dif : n_dif + n_snp_tar_block,
+                            n_dif : n_dif + n_snp_tar_block,
+                        ]
+                    )
+
+                ind_select = mat_pair[np.triu_indices(n_snp_tar_block, k=1)]
+                temp_ = np.triu_indices(n_snp_tar_block, k=1)
+                ind_pair = [
+                    (x, y) for x, y in zip(temp_[0][ind_select], temp_[1][ind_select])
+                ]
+                n_pair = len(ind_pair)
+
+                # Basic info
+                dic_score["CHR"].extend([CHR] * n_pair)
+                dic_score["SNP"].extend(
+                    [
+                        "%s|%s" % (v_snp_tar_block[x], v_snp_tar_block[y])
+                        for x, y in ind_pair
+                    ]
+                )
+                dic_score["BP"].extend(
+                    [
+                        "%s|%s" % (v_bp_tar_block[x], v_bp_tar_block[y])
+                        for x, y in ind_pair
+                    ]
+                )
+
+                # E score : r_ij
+                n_dif = ind_s - ind_s_ref
+                row_list = [n_dif + x[0] for x in ind_pair]
+                col_list = [x[1] for x in ind_pair]
+                dic_score["E"].extend(mat_ld_block[(row_list, col_list)])
+
+                # LD score : \sum_k r_ik r_jk a_ck + r_ij / n_sample * n_annot_outside
+                for AN in AN_list:
+                    v_annot = [
+                        dic_annot[AN][x] if x in dic_annot[AN] else 0
+                        for x in v_snp_ref_block
+                    ]
+                    v_annot = np.array(v_annot, dtype=np.float32)
+                    v_annot_outside = [
+                        dic_annot[AN][x] if x in dic_annot[AN] else 0
+                        for x in set(v_snp) - set(v_snp_ref_block)
+                    ]
+                    mat_score = (mat_ld_block.T * v_annot).dot(mat_ld_block)
+                    bias = np.sum(v_annot_outside) / n_sample
+                    print(AN, n_sample, bias, np.sum(v_annot_outside),)
+#                     mat_score += mat_ld_block[n_dif : n_dif + n_snp_tar_block, :] * bias
+                    row_list = [x[0] for x in ind_pair]
+                    col_list = [x[1] for x in ind_pair]
+                    dic_score["LD:%s" % AN].extend(mat_score[(row_list, col_list)])
+
+                # DLD score
+                for pAN in dic_mat_G:
+                    mat_score = dic_mat_G[pAN].dot(mat_ld_block).T.dot(mat_ld_block)
+                    row_list = [x[0] for x in ind_pair]
+                    col_list = [x[1] for x in ind_pair]
+                    dic_score["DLD:%s" % pAN].extend(mat_score[(row_list, col_list)])
 
         temp_df = pd.DataFrame(dic_score)
         if df_score is None:
@@ -359,8 +436,12 @@ def compute_score(
 
     if snp_range is not None:
         CHR, START, END = snp_range
-        snp_list = dic_data[CHR]["pvar"]["SNP"].values[START:END]
-        df_score = df_score.loc[df_score["SNP"].isin(snp_list)]
+        snp_set = set(dic_data[CHR]["pvar"]["SNP"].values[START:END])
+        ind_select = [
+            (x.split("|")[0] in snp_set) | (x.split("|")[-1] in snp_set)
+            for x in df_score["SNP"]
+        ]
+        df_score = df_score.loc[ind_select]
 
     if verbose:
         print(
