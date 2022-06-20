@@ -219,11 +219,10 @@ def compute_score(
     start_time = time.time()
 
     # SNP info : check consistency between dic_data and dic_ld
-    if snp_range is None:
-        CHR_list = sorted(set(dic_data))
-    else:
-        CHR_list = [snp_range[0]]
+    CHR_list = sorted(set(dic_data))
     for CHR in CHR_list:
+        if CHR not in dic_ld:
+            continue
         assert dic_ld[CHR].shape[0] == dic_data[CHR]["pvar"].shape[0], (
             "dic_ld does not match dimension of dic_data for CHR%d" % CHR
         )
@@ -256,7 +255,7 @@ def compute_score(
     if verbose:
         print("# Call: gdreg.score.compute_score")
         temp_str = ", ".join(
-            ["CHR%d (%d SNPs)" % (x, dic_ld[x].shape[0]) for x in CHR_list]
+            ["CHR%d (%d SNPs)" % (x, dic_data[x]['pvar'].shape[0]) for x in CHR_list]
         )
         print("    %d SNPs from %d CHRs: %s" % (len(v_snp), len(CHR_list), temp_str))
         if snp_range is not None:
@@ -271,6 +270,10 @@ def compute_score(
     # Compute score
     df_score = None
     for CHR in CHR_list:
+        
+        if snp_range is not None:
+            if CHR != snp_range[0]:
+                continue
 
         dic_score = {"CHR": [], "SNP": [], "BP": [], "E": []}
         dic_score.update({"LD:%s" % x: [] for x in AN_list})
@@ -370,35 +373,35 @@ def compute_score(
     return df_score
 
 
-def compute_dld_score(mat_ld, mat_G, v_annot, v_ps_sd):
-    """
-    Compute directional LD score:
+# def compute_dld_score(mat_ld, mat_G, v_annot, v_ps_sd):
+#     """
+#     Compute directional LD score:
 
-        `s_i = r_i^T (mat_G * 0.5(v_annot 1^T + 1^T v_annot ) * (v_ps_sd v_ps_sd^T)) r_i`
+#         `s_i = r_i^T (mat_G * 0.5(v_annot 1^T + 1^T v_annot ) * (v_ps_sd v_ps_sd^T)) r_i`
 
-    where `*` means hadamard product; dot product is omitted. `r_i` means LD between
-    SNP i and all other reference SNPs.
+#     where `*` means hadamard product; dot product is omitted. `r_i` means LD between
+#     SNP i and all other reference SNPs.
 
 
-    Parameters
-    ----------
-    mat_ld : np.ndarray
-        LD matrix of shape (n_snp_ref, n_snp)
-    mat_G : np.ndarray
-        SNP-pair indicator of shape (n_snp_ref, n_snp_ref)
-    v_annot : np.ndarray
-        Annotation of shape (n_snp_ref,)
-    v_ps_sd : np.ndarray
-        Per-SNP causal effect SD of shape (n_snp_ref,)
+#     Parameters
+#     ----------
+#     mat_ld : np.ndarray
+#         LD matrix of shape (n_snp_ref, n_snp)
+#     mat_G : np.ndarray
+#         SNP-pair indicator of shape (n_snp_ref, n_snp_ref)
+#     v_annot : np.ndarray
+#         Annotation of shape (n_snp_ref,)
+#     v_ps_sd : np.ndarray
+#         Per-SNP causal effect SD of shape (n_snp_ref,)
 
-    Returns
-    -------
-    v_score : np.array(dtype=np.float32)
-        DLD score of shape (n_snp,)
-    """
-    if sp.sparse.issparse(mat_G):
-        mat_sigma = mat_G.multiply(v_ps_sd).T.multiply(v_annot * v_ps_sd).toarray()
-    else:
-        mat_sigma = (mat_G * v_ps_sd).T * (v_annot * v_ps_sd)
-    v_score = (mat_sigma.dot(mat_ld) * mat_ld).sum(axis=0)
-    return v_score
+#     Returns
+#     -------
+#     v_score : np.array(dtype=np.float32)
+#         DLD score of shape (n_snp,)
+#     """
+#     if sp.sparse.issparse(mat_G):
+#         mat_sigma = mat_G.multiply(v_ps_sd).T.multiply(v_annot * v_ps_sd).toarray()
+#     else:
+#         mat_sigma = (mat_G * v_ps_sd).T * (v_annot * v_ps_sd)
+#     v_score = (mat_sigma.dot(mat_ld) * mat_ld).sum(axis=0)
+#     return v_score
