@@ -59,6 +59,7 @@ def main(args):
     RANDOM_SEED = args.random_seed
     SNP_RANGE = args.snp_range
     FLAG_FULL_LD = args.flag_full_ld
+    FLAG_CROSS_TERM = args.flag_cross_term
 
     # Parse and check arguments
     LEGAL_JOB_LIST = ["get_snp_block", "compute_ld", "compute_score", "regress"]
@@ -90,7 +91,8 @@ def main(args):
     header += "--snp_range %s\\\n" % SNP_RANGE
     header += "--memory %d\\\n" % MEMORY
     header += "--random_seed %d\\\n" % RANDOM_SEED
-    header += "--flag_full_ld %s\n" % FLAG_FULL_LD
+    header += "--flag_full_ld %s\\\n" % FLAG_FULL_LD
+    header += "--flag_cross_term %s\n" % FLAG_CROSS_TERM
     print(header)
 
     ###########################################################################################
@@ -310,6 +312,7 @@ def main(args):
             df_annot,
             pannot_list,
             pannot_hr_list,
+            cross_term = FLAG_CROSS_TERM,
             verbose=True,
             win_size=1e7,
             snp_range=snp_range,
@@ -373,6 +376,7 @@ if __name__ == "__main__":
     parser.add_argument("--memory", type=int, default=512)
     parser.add_argument("--random_seed", type=int, default=0)
     parser.add_argument("--flag_full_ld", type=bool, default=False)
+    parser.add_argument("--flag_cross_term", type=bool, default=False)
 
     args = parser.parse_args()
     main(args)

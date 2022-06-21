@@ -177,24 +177,28 @@ def compute_score(
     Parameters
     ----------
     dic_data : dict
-        Genotype data reader, organized, for each CHR, as
+        Genotype data reader. Must contain all SNPs used in the subsequent analyses.
 
         - dic_data[CHR]['pgen'] : .pgen file path
         - dic_data[CHR]['pvar'] : .pvar pd.DataFrame
         - dic_data[CHR]['psam'] : .psam pd.DataFrame
 
-    dic_ld : dict of sp.sparse.csc_matrix
-        dic_mat_ld[CHR] for LD matrix of chromosome CHR. The j-th column contains
-        all LDs of SNP j within a 1e7 window (5e6 on each side).
+    dic_ld : dict of sp.sparse.csc_matrix(dtype=np.float32)
+        dic_mat_ld[CHR] for LD matrix of chromosome CHR of shape (n_snp_chr, n_snp_chr).
+        The j-th column contains all LDs of SNP j within a 1e7 window (5e6 on each side).
+        If `snp_range` is given, only columns within `snp_range` need to have true values.
+        Others can be padded with zeros.
     df_annot : pd.DataFrame
         Single-SNP annotation.
     df_pannot_list : list of pd.DataFrame, default=[]
         Each element corresponds to SNP-pair annotation. Must contain
-        ['CHR', 'SNP', 'BP', 'pAN:pAN1'] columns.
+        ['CHR', 'SNP', 'BP', 'pAN:name'] columns.
     df_pannot_hr_list : list of pd.DataFrame, default=[]
         Each element corresponds to a high-res SNP-pair annotation. Must contain
-        ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:pAN1'] columns.
+        ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:name'] columns.
     cross_term : bool, default=False
+        If True, also compute scores for cross terms (Z_i Z_j) for SNP pairs i,j within 1000 SNPs
+        and covered by at least one pannot.
     sym_non_pAN : str, default='non-pAN'
         Symbol for SNPs not in the SNP-pair annotation.
     win_size : int, defualt=1e7
@@ -214,14 +218,13 @@ def compute_score(
 
     TODO
     ----
-    - Remove 'n_sample' for computing LD scores
 
     """
 
     start_time = time.time()
 
-    # SNP info : check consistency between dic_data and dic_ld
-    CHR_list = sorted(set(dic_data))
+    # SNP info
+    CHR_list = sorted(dic_data)  # CHR_list contains all CHRs
     for CHR in CHR_list:
         if CHR not in dic_ld:
             continue
@@ -233,7 +236,7 @@ def compute_score(
     for CHR in CHR_list:
         v_snp.extend(dic_data[CHR]["pvar"]["SNP"])
 
-    # Annotation info
+    # Annotation : read
     AN_list = [x for x in df_annot if x.startswith("AN:")]
     pAN_list = [[y for y in x if y.startswith("pAN")][0] for x in pannot_list]
     pAN_hr_list = [[y for y in x if y.startswith("pAN")][0] for x in pannot_hr_list]
@@ -245,19 +248,61 @@ def compute_score(
     for temp_df in pannot_list:
         pAN = [x for x in temp_df if x.startswith("pAN:")][0]
         dic_pannot[pAN] = {x: y for x, y in zip(temp_df["SNP"], temp_df[pAN])}
+
     dic_pannot_hr = {}
     for temp_df in pannot_hr_list:
         pAN = [x for x in temp_df if x.startswith("pAN:")][0]
         dic_pannot_hr[pAN] = [(x, y) for x, y in zip(temp_df["SNP"], temp_df["pSNP"])]
 
+    # Annotation : statistics of size and average r
+    dic_size, dic_avgr = {}, {}
+    for temp_df in pannot_list:
+        pAN = [x for x in temp_df if x.startswith("pAN:")][0]
+        n_pair, n_pair_r, sum_r = 0, 0, 0
+        for CHR in CHR_list:
+            v_snp_chr = dic_data[CHR]["pvar"]["SNP"].values
+            v_pAN = [
+                dic_pannot[pAN][x] if x in dic_pannot[pAN] else sym_non_pAN
+                for x in v_snp_chr
+            ]
+            mat_G = gdreg.util.pannot_to_csr(v_pAN, flag_matS=False)
+            n_pair += mat_G.sum()
+            if CHR in dic_ld:
+                ind_select = np.absolute(dic_ld[CHR]).sum(axis=0) > 0
+                ind_select = np.array(ind_select, dtype=bool).flatten()
+                sum_r += (
+                    dic_ld[CHR][:, ind_select].multiply(mat_G.T[:, ind_select]).sum()
+                )
+                n_pair_r += mat_G.T[:, ind_select].sum()
+        dic_size[pAN], dic_avgr[pAN] = n_pair, sum_r / n_pair_r
+
+    for temp_df in pannot_hr_list:
+        pAN = [x for x in temp_df if x.startswith("pAN:")][0]
+        n_pair, n_pair_r, sum_r = 0, 0, 0
+        for CHR in CHR_list:
+            v_snp_chr = dic_data[CHR]["pvar"]["SNP"].values
+            snp_set = set(v_snp_chr)
+            snp_pair_list = [
+                x for x in dic_pannot_hr[pAN] if (x[0] in snp_set) & (x[1] in snp_set)
+            ]
+            mat_G = gdreg.util.pannot_hr_to_csr(v_snp_chr, snp_pair_list)
+            n_pair += mat_G.sum()
+            if CHR in dic_ld:
+                ind_select = np.absolute(dic_ld[CHR]).sum(axis=0) > 0
+                ind_select = np.array(ind_select, dtype=bool).flatten()
+                sum_r += (
+                    dic_ld[CHR][:, ind_select].multiply(mat_G.T[:, ind_select]).sum()
+                )
+                n_pair_r += mat_G.T[:, ind_select].sum()
+        dic_size[pAN], dic_avgr[pAN] = n_pair, sum_r / n_pair_r
+
     # block_size
-    # TODO : determine size
-    block_size = 500
+    block_size = 1000
 
     if verbose:
         print("# Call: gdreg.score.compute_score")
         temp_str = ", ".join(
-            ["CHR%d (%d SNPs)" % (x, dic_data[x]['pvar'].shape[0]) for x in CHR_list]
+            ["CHR%d (%d SNPs)" % (x, dic_data[x]["pvar"].shape[0]) for x in CHR_list]
         )
         print("    %d SNPs from %d CHRs: %s" % (len(v_snp), len(CHR_list), temp_str))
         if snp_range is not None:
@@ -265,22 +310,30 @@ def compute_score(
         print("    Single-SNP annots : %s" % ", ".join(AN_list))
         print(
             "    SNP-pair annots : %s"
-            % ", ".join(pAN_list + ["%s (hr)" % x for x in pAN_hr_list])
+            % ", ".join(
+                [
+                    "%s (%d pairs, avgr=%0.3f)" % (x, dic_size[x], dic_avgr[x])
+                    for x in pAN_list
+                ]
+                + [
+                    "%s (hr; %d pairs, avgr=%0.3f)" % (x, dic_size[x], dic_avgr[x])
+                    for x in pAN_hr_list
+                ]
+            )
         )
         print("    win_size=%0.1fMB, memory=%dMB" % (win_size / 1e6, memory))
 
     # Compute score
     df_score = None
     for CHR in CHR_list:
-        
+
         if snp_range is not None:
             if CHR != snp_range[0]:
                 continue
 
         dic_score = {"CHR": [], "SNP": [], "BP": [], "E": []}
         dic_score.update({"LD:%s" % x: [] for x in AN_list})
-        dic_score.update({"DLD:%s" % x: [] for x in pAN_list})
-        dic_score.update({"DLD:%s" % x: [] for x in pAN_hr_list})
+        dic_score.update({"DLD:%s" % x: [] for x in pAN_list + pAN_hr_list})
 
         v_snp_chr = dic_data[CHR]["pvar"]["SNP"].values
         v_bp_chr = dic_data[CHR]["pvar"]["BP"].values
@@ -298,13 +351,13 @@ def compute_score(
             )
 
             if snp_range is not None:
-                if (ind_s > snp_range[2]) | (ind_e < snp_range[1]):
+                if (ind_s >= snp_range[2]) | (ind_e <= snp_range[1]):
                     continue
 
             # Basic info
-            dic_score["CHR"].extend(dic_data[CHR]["pvar"]["CHR"].values[ind_s:ind_e])
-            dic_score["SNP"].extend(dic_data[CHR]["pvar"]["SNP"].values[ind_s:ind_e])
-            dic_score["BP"].extend(dic_data[CHR]["pvar"]["BP"].values[ind_s:ind_e])
+            dic_score["CHR"].extend([CHR] * (ind_e - ind_s))
+            dic_score["SNP"].extend(v_snp_chr[ind_s:ind_e])
+            dic_score["BP"].extend(v_bp_chr[ind_s:ind_e])
 
             mat_ld_block = dic_ld[CHR][:, ind_s:ind_e].toarray()[
                 ind_s_ref:ind_e_ref, :
@@ -360,7 +413,6 @@ def compute_score(
                 dic_score["DLD:%s" % pAN].extend(v_score)
 
             # Cross terms
-            # For pairs of target SNPs within the block with non-zero pannot
             if cross_term:
                 # ind_pair
                 v_snp_tar_block = list(v_snp_chr[ind_s:ind_e])
@@ -376,7 +428,6 @@ def compute_score(
                             n_dif : n_dif + n_snp_tar_block,
                         ]
                     )
-
                 ind_select = mat_pair[np.triu_indices(n_snp_tar_block, k=1)]
                 temp_ = np.triu_indices(n_snp_tar_block, k=1)
                 ind_pair = [
@@ -405,7 +456,7 @@ def compute_score(
                 col_list = [x[1] for x in ind_pair]
                 dic_score["E"].extend(mat_ld_block[(row_list, col_list)])
 
-                # LD score : \sum_k r_ik r_jk a_ck + r_ij / n_sample * n_annot_outside
+                # LD score : \sum_k r_ik r_jk a_ck + r_ij * n_pair_outside / n_sample 
                 for AN in AN_list:
                     v_annot = [
                         dic_annot[AN][x] if x in dic_annot[AN] else 0
@@ -418,17 +469,22 @@ def compute_score(
                     ]
                     mat_score = (mat_ld_block.T * v_annot).dot(mat_ld_block)
                     bias = np.sum(v_annot_outside) / n_sample
-                    print(AN, n_sample, bias, np.sum(v_annot_outside),)
-#                     mat_score += mat_ld_block[n_dif : n_dif + n_snp_tar_block, :] * bias
+                    mat_score += mat_ld_block[n_dif : n_dif + n_snp_tar_block, :] * bias
                     row_list = [x[0] for x in ind_pair]
                     col_list = [x[1] for x in ind_pair]
                     dic_score["LD:%s" % AN].extend(mat_score[(row_list, col_list)])
 
-                # DLD score
+                # DLD score : \sum_k,k' r_ik r_jk' G_kk' + r_ij * avgr * n_pair_outside / n_sample 
                 for pAN in dic_mat_G:
                     mat_score = dic_mat_G[pAN].dot(mat_ld_block).T.dot(mat_ld_block)
                     row_list = [x[0] for x in ind_pair]
                     col_list = [x[1] for x in ind_pair]
+#                     bias = (
+#                         (dic_size[pAN] - np.sum(dic_mat_G[pAN]))
+#                         * dic_avgr[pAN]
+#                         / n_sample
+#                     )
+#                     mat_score += mat_ld_block[n_dif : n_dif + n_snp_tar_block, :] * bias
                     dic_score["DLD:%s" % pAN].extend(mat_score[(row_list, col_list)])
 
         temp_df = pd.DataFrame(dic_score)

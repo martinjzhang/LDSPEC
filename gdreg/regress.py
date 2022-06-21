@@ -13,6 +13,7 @@ def estimate(
     df_annot,
     pannot_list=[],
     pannot_hr_list=[],
+    cross_term=False,
     n_jn_block=100,
     sym_non_pAN="non-pAN",
     verbose=False,
@@ -40,11 +41,13 @@ def estimate(
         Single-SNP annotation. Used in `gdreg.score.summarize`.
     df_pannot_list : list of pd.DataFrame, default=[]
         Each element corresponds to SNP-pair annotation. Must contain
-        ['CHR', 'SNP', 'BP', 'pAN:pAN1'] columns. Used in `gdreg.score.compute_score`.
+        ['CHR', 'SNP', 'BP', 'pAN:name'] columns.
     df_pannot_hr_list : list of pd.DataFrame, default=[]
         Each element corresponds to a high-res SNP-pair annotation. Must contain
-        ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:pAN1'] columns. Used in
-        `gdreg.score.compute_score`.
+        ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:name'] columns.
+    cross_term : bool, default=False
+        If True, also use cross terms (Z_i Z_j) for regression, for SNP pairs i,j within
+        1000 SNPs and covered by at least one pannot.    
     n_jn_block : int, default=100
         Number of JN blocks.
     sym_non_pAN : str, default='non-pAN'
@@ -82,6 +85,7 @@ def estimate(
 
     # df_score
     df_score.index = df_score["SNP"]
+    df_score = df_score.loc[df_score.isna().sum(axis=1)==0].copy() # TODO
     LD_list = [x for x in df_score if x.startswith("LD:")]
     DLD_list = [x for x in df_score if x.startswith("DLD:")]
     assert "E" in df_score, "'E' not in df_score"
@@ -93,9 +97,9 @@ def estimate(
 
     # df_sumstats
     n_sample_zsq = df_sumstats["N"].mean().astype(int)
-    dic_zsq = {x: y**2 for x, y in zip(df_sumstats["SNP"], df_sumstats["Z"])}
+    dic_zsc = {x: y for x, y in zip(df_sumstats["SNP"], df_sumstats["Z"])}
     outlier_thres = max(80, 0.001 * n_sample_zsq)  # Finucane 2015 Nat Genet
-    dic_zsq = {x: y for x, y in dic_zsq.items() if y < outlier_thres}
+    dic_zsc = {x: y for x, y in dic_zsc.items() if y**2 < outlier_thres}
 
     if verbose:
         print(
@@ -104,29 +108,39 @@ def estimate(
         )
         print(
             "        Remove duplicate or ZSQ>%0.1f SNPs, %d remaining, avg. zsq=%0.2f"
-            % (outlier_thres, len(dic_zsq), np.mean(list(dic_zsq.values())))
+            % (outlier_thres, len(dic_zsc), np.mean(np.array(list(dic_zsc.values()))**2))
         )
 
     # df_reg
-    df_reg = df_snp.copy()
+    df_reg = df_score[["SNP", "CHR", "BP"]].copy()
+    if cross_term is False:
+        ind_select = ["|" not in x for x in df_reg["SNP"]]
+        df_reg = df_reg.loc[ind_select].copy()
     df_reg.drop_duplicates("SNP", inplace=True)
-    df_reg = df_reg.loc[df_reg["SNP"].isin(df_score["SNP"])]
-    df_reg = df_reg.loc[df_reg["SNP"].isin(dic_zsq)]
-    df_reg["ZSQ"] = [dic_zsq[x] for x in df_reg["SNP"]]
+    df_reg["SNP1"] = [x.split("|")[0] for x in df_reg["SNP"]]
+    df_reg["SNP2"] = [x.split("|")[-1] for x in df_reg["SNP"]]
+    df_reg = df_reg.loc[(df_reg["SNP1"].isin(dic_zsc)) & (df_reg["SNP2"].isin(dic_zsc))]
+    df_reg["ZSQ"] = [dic_zsc[x]**2 for x,y in zip(df_reg["SNP1"], df_reg["SNP2"])]
+    print(df_reg.shape)
+#     df_reg = df_snp.copy()
+#     df_reg.drop_duplicates("SNP", inplace=True)
+#     df_reg = df_reg.loc[df_reg["SNP"].isin(df_score["SNP"])]
+#     df_reg = df_reg.loc[df_reg["SNP"].isin(dic_zsc)]
+#     df_reg["ZSQ"] = [dic_zsc[x]**2 for x in df_reg["SNP"]]
     df_reg.index = df_reg["SNP"]
     df_reg.sort_values(by=["CHR", "BP"], inplace=True)
     dic_block = get_block(df_reg, pannot_list, sym_non_pAN, n_jn_block)
 
     if verbose:
         print(
-            "    Regression : n_snp=%d, n_block=%d" % (df_reg.shape[0], len(dic_block))
+            "    Regression : n_sample=%d (SNP or SNP pairs), n_block=%d" % (df_reg.shape[0], len(dic_block))
         )
 
     # Regression : LD-score only and estimate \tau
     dic_res = {}
     temp_df_reg = df_reg.join(df_score[LD_list + ["E"]])
     dic_res[0] = regress(
-        temp_df_reg, dic_block, n_sample_zsq, verbose=verbose, verbose_prefix="    "
+        temp_df_reg, dic_block, n_sample_zsq, cross_term=cross_term, verbose=verbose, verbose_prefix="    "
     )
     dic_res[0]["summary"] = summarize(
         dic_res[0],
@@ -139,7 +153,7 @@ def estimate(
     # Regression : both \tau and \rho
     temp_df_reg = df_reg.join(df_score[LD_list + DLD_list + ["E"]])
     dic_res[1] = regress(
-        temp_df_reg, dic_block, n_sample_zsq, verbose=verbose, verbose_prefix="    "
+        temp_df_reg, dic_block, n_sample_zsq, cross_term=cross_term, verbose=verbose, verbose_prefix="    "
     )
     dic_res[1]["summary"] = summarize(
         dic_res[1],
@@ -402,6 +416,7 @@ def regress(
     df_reg,
     dic_block,
     n_sample_zsq,
+    cross_term=False,
     verbose=False,
     verbose_prefix="",
 ):
@@ -470,7 +485,6 @@ def regress(
         + 0.5 * df_reg["E"].values
     ).clip(min=0.1)
     v_w = np.sqrt(1 / v_ld / v_zsq_var)
-    v_w = v_w * 0 + 1
     v_w = v_w / v_w.mean()
 
     # Regression
