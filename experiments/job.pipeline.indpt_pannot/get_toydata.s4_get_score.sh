@@ -14,8 +14,8 @@ ANNOT_FILE=/n/groups/price/martin/WES_analysis/toy_10K/toy.annot.gz,/n/groups/pr
     
     
 # compute_ld
-for i_line in {2..20}
-# for i_line in 1
+for i_line in {1..20}
+# for i_line in 2
 do 
 PREFIX_OUT=/n/groups/price/martin/WES_analysis/toy_10K/gdreg_file_score_cross_term/toy_10K
 SNP_RANGE=$( head -n $i_line "/n/groups/price/martin/WES_analysis/toy_10K/gdreg_file_ld/toy_10K.snp_range.txt" | tail -1 )
@@ -31,7 +31,7 @@ LD_FILE=/n/groups/price/martin/WES_analysis/toy_10K/gdreg_file_ld/toy_10K.${SNP_
 #     --flag_cross_term True\
 #     --prefix_out $PREFIX_OUT
     
-sbatch -p short -t 0-00:05 -n 1 -c 1 --mem=4000 --open-mode=truncate -o $PREFIX_OUT.compute_score.sbatch.log --wrap " \
+sbatch -p short -t 0-00:10 -n 1 -c 1 --mem=4000 --open-mode=truncate -o ${PREFIX_OUT}.${SNP_RANGE}.compute_score.sbatch.log --wrap " \
 python3 /home/jz286/WES_analysis/GDReg/run_gdreg.py\
     --job compute_score\
     --pgen_file $PGEN_FILE\

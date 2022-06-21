@@ -335,6 +335,7 @@ def main(args):
             df_annot,
             pannot_list=pannot_list,
             pannot_hr_list=pannot_hr_list,
+            cross_term=FLAG_CROSS_TERM,
             n_jn_block=100,
             sym_non_pAN="non-pAN",
             verbose=True,

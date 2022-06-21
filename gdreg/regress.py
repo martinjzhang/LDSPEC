@@ -47,7 +47,7 @@ def estimate(
         ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:name'] columns.
     cross_term : bool, default=False
         If True, also use cross terms (Z_i Z_j) for regression, for SNP pairs i,j within
-        1000 SNPs and covered by at least one pannot.    
+        1000 SNPs and covered by at least one pannot.
     n_jn_block : int, default=100
         Number of JN blocks.
     sym_non_pAN : str, default='non-pAN'
@@ -85,7 +85,7 @@ def estimate(
 
     # df_score
     df_score.index = df_score["SNP"]
-    df_score = df_score.loc[df_score.isna().sum(axis=1)==0].copy() # TODO
+    df_score = df_score.loc[df_score.isna().sum(axis=1) == 0].copy()  # TODO
     LD_list = [x for x in df_score if x.startswith("LD:")]
     DLD_list = [x for x in df_score if x.startswith("DLD:")]
     assert "E" in df_score, "'E' not in df_score"
@@ -99,7 +99,7 @@ def estimate(
     n_sample_zsq = df_sumstats["N"].mean().astype(int)
     dic_zsc = {x: y for x, y in zip(df_sumstats["SNP"], df_sumstats["Z"])}
     outlier_thres = max(80, 0.001 * n_sample_zsq)  # Finucane 2015 Nat Genet
-    dic_zsc = {x: y for x, y in dic_zsc.items() if y**2 < outlier_thres}
+    dic_zsc = {x: y for x, y in dic_zsc.items() if y ** 2 < outlier_thres}
 
     if verbose:
         print(
@@ -108,7 +108,11 @@ def estimate(
         )
         print(
             "        Remove duplicate or ZSQ>%0.1f SNPs, %d remaining, avg. zsq=%0.2f"
-            % (outlier_thres, len(dic_zsc), np.mean(np.array(list(dic_zsc.values()))**2))
+            % (
+                outlier_thres,
+                len(dic_zsc),
+                np.mean(np.array(list(dic_zsc.values())) ** 2),
+            )
         )
 
     # df_reg
@@ -120,27 +124,35 @@ def estimate(
     df_reg["SNP1"] = [x.split("|")[0] for x in df_reg["SNP"]]
     df_reg["SNP2"] = [x.split("|")[-1] for x in df_reg["SNP"]]
     df_reg = df_reg.loc[(df_reg["SNP1"].isin(dic_zsc)) & (df_reg["SNP2"].isin(dic_zsc))]
-    df_reg["ZSQ"] = [dic_zsc[x]**2 for x,y in zip(df_reg["SNP1"], df_reg["SNP2"])]
-    print(df_reg.shape)
-#     df_reg = df_snp.copy()
-#     df_reg.drop_duplicates("SNP", inplace=True)
-#     df_reg = df_reg.loc[df_reg["SNP"].isin(df_score["SNP"])]
-#     df_reg = df_reg.loc[df_reg["SNP"].isin(dic_zsc)]
-#     df_reg["ZSQ"] = [dic_zsc[x]**2 for x in df_reg["SNP"]]
+    df_reg["ZSQ"] = [dic_zsc[x] * dic_zsc[y] for x, y in zip(df_reg["SNP1"], df_reg["SNP2"])]
+    #     df_reg = df_snp.copy()
+    #     df_reg.drop_duplicates("SNP", inplace=True)
+    #     df_reg = df_reg.loc[df_reg["SNP"].isin(df_score["SNP"])]
+    #     df_reg = df_reg.loc[df_reg["SNP"].isin(dic_zsc)]
+    #     df_reg["ZSQ"] = [dic_zsc[x]**2 for x in df_reg["SNP"]]
     df_reg.index = df_reg["SNP"]
     df_reg.sort_values(by=["CHR", "BP"], inplace=True)
-    dic_block = get_block(df_reg, pannot_list, sym_non_pAN, n_jn_block)
+#     dic_block = get_block(df_reg, pannot_list, sym_non_pAN, n_jn_block)
 
     if verbose:
         print(
-            "    Regression : n_sample=%d (SNP or SNP pairs), n_block=%d" % (df_reg.shape[0], len(dic_block))
+            "    Regression : n_sample=%d (SNP or SNP pairs), n_block=%d"
+            % (df_reg.shape[0], n_jn_block)
         )
 
-    # Regression : LD-score only and estimate \tau
+    # Regression : LD-score only and estimate \tau (using squared terms only)
     dic_res = {}
     temp_df_reg = df_reg.join(df_score[LD_list + ["E"]])
+    if cross_term is True:
+        ind_select = ["|" not in x for x in temp_df_reg["SNP"]]
+        temp_df_reg = temp_df_reg.loc[ind_select].copy()
+    dic_block = get_block(temp_df_reg, pannot_list, sym_non_pAN, n_jn_block)    
     dic_res[0] = regress(
-        temp_df_reg, dic_block, n_sample_zsq, cross_term=cross_term, verbose=verbose, verbose_prefix="    "
+        temp_df_reg,
+        dic_block,
+        n_sample_zsq,
+        verbose=verbose,
+        verbose_prefix="    ",
     )
     dic_res[0]["summary"] = summarize(
         dic_res[0],
@@ -152,8 +164,13 @@ def estimate(
 
     # Regression : both \tau and \rho
     temp_df_reg = df_reg.join(df_score[LD_list + DLD_list + ["E"]])
+    dic_block = get_block(temp_df_reg, pannot_list, sym_non_pAN, n_jn_block)
     dic_res[1] = regress(
-        temp_df_reg, dic_block, n_sample_zsq, cross_term=cross_term, verbose=verbose, verbose_prefix="    "
+        temp_df_reg,
+        dic_block,
+        n_sample_zsq,
+        verbose=verbose,
+        verbose_prefix="    ",
     )
     dic_res[1]["summary"] = summarize(
         dic_res[1],
@@ -368,7 +385,7 @@ def get_block(df_reg, pannot_list=[], sym_non_pAN="non-pAN", n_block=100):
     ----------
     df_reg : pd.DataFrame
         SNPs used in regression. Assumed to be sorted by genomic location.
-        Should contain ['CHR', 'SNP', 'BP', 'ZSQ'].
+        Should contain ['CHR', 'SNP', 'BP', 'SNP1', 'SNP2', 'ZSQ'].
     pannot_list : list of pd.DataFrame, default=[]
         Each element corresponds to SNP-pair annotation. Must contain
         ['CHR', 'SNP', 'BP', 'pAN:pAN1'] columns.
@@ -381,7 +398,10 @@ def get_block(df_reg, pannot_list=[], sym_non_pAN="non-pAN", n_block=100):
     -------
     dic_block : dict
         Block information. `dic_block[i] = (ind_s, ind_e)`.
-
+        
+    TODO
+    ----
+    1. Currently based only on pannot and 'SNP1'.
     """
 
     n_snp = df_reg.shape[0]
@@ -398,7 +418,7 @@ def get_block(df_reg, pannot_list=[], sym_non_pAN="non-pAN", n_block=100):
         pAN = [x for x in df_pannot if x.startswith("pAN")][0]
         temp_dic = {x: y for x, y in zip(df_pannot["SNP"], df_pannot[pAN])}
         temp_v = np.array(
-            [temp_dic[x] if x in temp_dic else sym_non_pAN for x in df_reg["SNP"]]
+            [temp_dic[x] if x in temp_dic else sym_non_pAN for x in df_reg["SNP1"]]
         )
         ind_select = (temp_v[1:] == temp_v[:-1]) & (temp_v[1:] != sym_non_pAN)
         nocut_set.update(np.arange(1, n_snp)[ind_select])
@@ -416,7 +436,6 @@ def regress(
     df_reg,
     dic_block,
     n_sample_zsq,
-    cross_term=False,
     verbose=False,
     verbose_prefix="",
 ):
@@ -427,8 +446,9 @@ def regress(
     Parameters
     ----------
     df_reg : pd.DataFrame
-        GDReg LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'ZSQ',
-        'LD:AN1', 'LD:AN2', 'DLD:PAN:AN1', 'DLD:PAN:AN2'].
+        GDReg LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'SNP1', 'SNP2', 'ZSQ',
+        'LD:AN1', 'LD:AN2', 'DLD:PAN:AN1', 'DLD:PAN:AN2']. If `SNP1|SNP2` in `df_reg`,
+        `SNP1` and `SNP2` must also be in `df_reg`.
     dic_block : dict
         Block information. `dic_block[i] = (ind_s, ind_e)`.
     n_sample_zsq : int
@@ -474,18 +494,38 @@ def regress(
         )
 
     # Regression weights
-    # 1. LD : 1 / l_j
+    # 1. LD : 1 / l_i for Z_i^2 and 1 / l_ij for Z_i Z_j
     # 2. Zsq variance : 1 / (1 + N h_g^2 l_j / M) ^ 2
-    LD_all_list = [
+    #    - Z_i^2 : 2 * (N l_i + 1) ^ 2
+    #    - Z_i Z_j : (N l_i + 1) (N l_j + 1) + (N l_ij + 1) ^ 2
+    # TODO : Balance Z_i^2 and Z_i Z_j
+    temp_list = [
         x for x in df_reg if x.startswith("LD:AN:all") | x.startswith("LD:AN:ALL")
     ]
-    v_ld = df_reg[LD_all_list].sum(axis=1).values.clip(min=1)
-    v_zsq_var = (
-        n_sample_zsq * 0.5 * df_reg[LD_all_list].sum(axis=1).values / df_reg.shape[0]
-        + 0.5 * df_reg["E"].values
-    ).clip(min=0.1)
-    v_w = np.sqrt(1 / v_ld / v_zsq_var)
+    v_ld = df_reg[temp_list].sum(axis=1).values.clip(min=0.1)
+    dic_ld = {(x, y): z for x, y, z in zip(df_reg["SNP1"], df_reg["SNP2"], v_ld)}
+    v_zsq_var = [
+        (n_sample_zsq * dic_ld[(s1, s1)] + 1) * (n_sample_zsq * dic_ld[(s2, s2)] + 1)
+        + (n_sample_zsq * dic_ld[(s1, s2)] + 1) ** 2
+        for s1, s2 in zip(df_reg["SNP1"], df_reg["SNP2"])
+    ]
+    v_zsq_var = np.array(v_zsq_var, dtype=np.float32).clip(min=0.1)
+    v_w = np.sqrt(1 / v_ld / v_zsq_var).astype(np.float32)
     v_w = v_w / v_w.mean()
+
+#     # Regression weights
+#     # 1. LD : 1 / l_j
+#     # 2. Zsq variance : 1 / (1 + N h_g^2 l_j / M) ^ 2
+#     LD_all_list = [
+#         x for x in df_reg if x.startswith("LD:AN:all") | x.startswith("LD:AN:ALL")
+#     ]
+#     v_ld = df_reg[LD_all_list].sum(axis=1).values.clip(min=1)
+#     v_zsq_var = (
+#         n_sample_zsq * 0.5 * df_reg[LD_all_list].sum(axis=1).values / df_reg.shape[0]
+#         + 0.5 * df_reg["E"].values
+#     ).clip(min=0.1)
+#     v_w = np.sqrt(1 / v_ld / v_zsq_var)
+#     v_w = v_w / v_w.mean()
 
     # Regression
     mat_X = df_reg[reg_list].values.astype(np.float32)

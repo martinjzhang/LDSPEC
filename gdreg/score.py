@@ -445,7 +445,7 @@ def compute_score(
                 )
                 dic_score["BP"].extend(
                     [
-                        "%s|%s" % (v_bp_tar_block[x], v_bp_tar_block[y])
+                        int(0.5 * (v_bp_tar_block[x] + v_bp_tar_block[y]))
                         for x, y in ind_pair
                     ]
                 )
