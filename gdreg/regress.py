@@ -470,7 +470,6 @@ def regress(
         + 0.5 * df_reg["E"].values
     ).clip(min=0.1)
     v_w = np.sqrt(1 / v_ld / v_zsq_var)
-    v_w = v_w * 0 + 1
     v_w = v_w / v_w.mean()
 
     # Regression
