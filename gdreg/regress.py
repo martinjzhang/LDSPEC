@@ -504,10 +504,11 @@ def regress(
     ]
     v_ld = df_reg[temp_list].sum(axis=1).values.clip(min=0.1)
     dic_ld = {(x, y): z for x, y, z in zip(df_reg["SNP1"], df_reg["SNP2"], v_ld)}
+    n_snp = (df_reg["SNP1"]==df_reg["SNP2"]).sum()
     v_zsq_var = [
-        (n_sample_zsq * dic_ld[(s1, s1)] + 1) * (n_sample_zsq * dic_ld[(s2, s2)] + 1)
-        + (n_sample_zsq * dic_ld[(s1, s2)] + 1) ** 2
-        for s1, s2 in zip(df_reg["SNP1"], df_reg["SNP2"])
+        (n_sample_zsq / n_snp * dic_ld[(s1, s1)] + 1) * (n_sample_zsq / n_snp * dic_ld[(s2, s2)] + 1)
+        + (n_sample_zsq / n_snp * dic_ld[(s1, s2)] + ld_e) ** 2
+        for s1, s2, ld_e in zip(df_reg["SNP1"], df_reg["SNP2"], df_reg["E"])
     ]
     v_zsq_var = np.array(v_zsq_var, dtype=np.float32).clip(min=0.1)
     v_w = np.sqrt(1 / v_ld / v_zsq_var).astype(np.float32)
