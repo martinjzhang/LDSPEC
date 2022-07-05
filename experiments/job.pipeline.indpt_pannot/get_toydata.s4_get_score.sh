@@ -9,27 +9,17 @@
 #SBATCH -e /home/jz286/WES_analysis/wes_rare/experiments/job_info/hostname_%j.err 
 #SBATCH --mail-type=NONE#SBATCH --mail-type=NONE
 
-PGEN_FILE=/n/groups/price/martin/WES_analysis/toy_10K/chr@_v1.SPB.hg19.toy_10K
-ANNOT_FILE=/n/groups/price/martin/WES_analysis/toy_10K/toy.annot.gz,/n/groups/price/martin/WES_analysis/toy_10K/toy.pannot.gz,/n/groups/price/martin/WES_analysis/toy_10K/toy.pannot_hr.gz
+PGEN_FILE=/n/groups/price/martin/data_GDREG/toy_10K/chr@_v1.SPB.hg19.toy_10K
+ANNOT_FILE=/n/groups/price/martin/data_GDREG/toy_10K/toy.annot.gz,/n/groups/price/martin/data_GDREG/toy_10K/toy.pannot.gz,/n/groups/price/martin/data_GDREG/toy_10K/toy.pannot_hr.gz
     
     
 # compute_ld
-for i_line in {1..20}
-# for i_line in 2
+for i_line in {2..10}
+# for i_line in 1
 do 
-PREFIX_OUT=/n/groups/price/martin/WES_analysis/toy_10K/gdreg_file_score_cross_term/toy_10K
-SNP_RANGE=$( head -n $i_line "/n/groups/price/martin/WES_analysis/toy_10K/gdreg_file_ld/toy_10K.snp_range.txt" | tail -1 )
-LD_FILE=/n/groups/price/martin/WES_analysis/toy_10K/gdreg_file_ld/toy_10K.${SNP_RANGE}_ld.npz
-
-# python3 /home/jz286/WES_analysis/GDReg/run_gdreg.py\
-#     --job compute_score\
-#     --pgen_file $PGEN_FILE\
-#     --ld_file $LD_FILE\
-#     --annot_file $ANNOT_FILE\
-#     --random_seed 0\
-#     --memory 2048\
-#     --flag_cross_term True\
-#     --prefix_out $PREFIX_OUT
+PREFIX_OUT=/n/groups/price/martin/data_GDREG/toy_10K/gdreg_file_score/toy_10K
+SNP_RANGE=$( head -n $i_line "/n/groups/price/martin/data_GDREG/toy_10K/toy_10K.snp_range.txt" | tail -1 )
+LD_FILE=/n/groups/price/martin/data_GDREG/toy_10K/gdreg_file_ld/toy_10K.${SNP_RANGE}_ld.npz
     
 sbatch -p short -t 0-00:10 -n 1 -c 1 --mem=4000 --open-mode=truncate -o ${PREFIX_OUT}.${SNP_RANGE}.compute_score.sbatch.log --wrap " \
 python3 /home/jz286/WES_analysis/GDReg/run_gdreg.py\
@@ -37,7 +27,6 @@ python3 /home/jz286/WES_analysis/GDReg/run_gdreg.py\
     --pgen_file $PGEN_FILE\
     --ld_file $LD_FILE\
     --annot_file $ANNOT_FILE\
-    --random_seed 0\
     --memory 2048\
     --flag_cross_term True\
     --prefix_out $PREFIX_OUT"

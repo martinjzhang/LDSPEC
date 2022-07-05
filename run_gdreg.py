@@ -27,7 +27,7 @@ compute_ld : compute LD matrix.
     
 compute_score : compute LD and DLD scores.
     - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--memory]
-    ｜ [--random_seed]
+    ｜ [--random_seed] | [--flag_cross_term]
     - Output : LD and DLD scores.
     
 regress : infer parameters \tau and \rho.
@@ -55,9 +55,9 @@ def main(args):
     SUMSTATS_FILE = args.sumstats_file
     ANNOT_FILE = args.annot_file
     PREFIX_OUT = args.prefix_out
+    SNP_RANGE = args.snp_range
     MEMORY = args.memory
     RANDOM_SEED = args.random_seed
-    SNP_RANGE = args.snp_range
     FLAG_FULL_LD = args.flag_full_ld
     FLAG_CROSS_TERM = args.flag_cross_term
 
@@ -66,6 +66,8 @@ def main(args):
     err_msg = "# run_gdreg: --job=%s not supported" % JOB
     assert JOB in LEGAL_JOB_LIST, err_msg
 
+    if JOB in ["get_snp_block", "compute_ld", "compute_score"]:
+        assert PGEN_FILE is not None, "--pgen_file required for --job=%s" % JOB
     if JOB in ["compute_score"]:
         assert LD_FILE is not None, "--ld_file required for --job=%s" % JOB
     if JOB in ["regress"]:
@@ -99,7 +101,7 @@ def main(args):
     ######                                   Data Loading                                ######
     ###########################################################################################
     # Load --pgen_file
-    if JOB in ["get_snp_block", "compute_ld", "compute_score", "regress"]:
+    if JOB in ["get_snp_block", "compute_ld", "compute_score"]:
         print("# Loading --pgen_file")
         dic_data = {}
         if "@" not in PGEN_FILE:
@@ -162,6 +164,7 @@ def main(args):
                 df_score = pd.concat([df_score, temp_df], axis=0)
 
         df_score.sort_values(["CHR", "BP"], inplace=True)
+        df_score.index = df_score["SNP"]
         LD_list = [x for x in df_score if x.startswith("LD:")]
         DLD_list = [x for x in df_score if x.startswith("DLD:")]
 
@@ -223,7 +226,7 @@ def main(args):
     ###########################################################################################
     if JOB == "get_snp_block":
         print("# Running --job get_snp_block")
-        block_size = 3000
+        block_size = 10000
         fout = open(PREFIX_OUT + ".snp_range.txt", "w")
         for CHR in dic_data:
             n_snp = dic_data[CHR]["pvar"].shape[0]
@@ -260,12 +263,12 @@ def main(args):
                 )
                 ind_s = START + i_block * block_size
                 ind_e = min(START + (i_block + 1) * block_size, END)
-                ind_s_ref = np.searchsorted(v_bp, v_bp[ind_s] - 5.05e6, side="left")
-                ind_s_ref = max(0, ind_s_ref - 3)
+                ind_s_ref = np.searchsorted(v_bp, v_bp[ind_s] - 5.01e6, side="left")
+                ind_s_ref = max(0, ind_s_ref - 1)
                 ind_e_ref = np.searchsorted(
-                    v_bp, v_bp[ind_e - 1] + 5.05e6, side="right"
+                    v_bp, v_bp[ind_e - 1] + 5.01e6, side="right"
                 )
-                ind_e_ref = min(n_snp, ind_e_ref + 3)
+                ind_e_ref = min(n_snp, ind_e_ref + 1)
 
                 pos_tar = [CHR, ind_s, ind_e]
                 pos_ref = [CHR, ind_s_ref, ind_e_ref]
@@ -312,7 +315,7 @@ def main(args):
             df_annot,
             pannot_list,
             pannot_hr_list,
-            cross_term = FLAG_CROSS_TERM,
+            flag_cross_term=FLAG_CROSS_TERM,
             verbose=True,
             win_size=1e7,
             snp_range=snp_range,
@@ -329,13 +332,12 @@ def main(args):
         print("# Running --job regress")
 
         dic_res = gdreg.regress.estimate(
-            dic_data,
             df_score,
             df_sumstats,
             df_annot,
             pannot_list=pannot_list,
             pannot_hr_list=pannot_hr_list,
-            cross_term=FLAG_CROSS_TERM,
+            flag_cross_term=FLAG_CROSS_TERM,
             n_jn_block=100,
             sym_non_pAN="non-pAN",
             verbose=True,
@@ -362,19 +364,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="gdreg")
 
     parser.add_argument("--job", type=str, required=True, help="One of [compute_ld]")
-    parser.add_argument("--pgen_file", type=str, required=True)
+    parser.add_argument("--pgen_file", type=str, required=False, default=None)
     parser.add_argument("--ld_file", type=str, required=False, default=None)
     parser.add_argument("--score_file", type=str, required=False, default=None)
     parser.add_argument("--sumstats_file", type=str, required=False, default=None)
-    parser.add_argument("--annot_file", type=str, required=False, default=None)
+    parser.add_argument(
+        "--annot_file", type=str, required=False, default=None, help="Contain all SNPs"
+    )
     parser.add_argument("--prefix_out", type=str, required=True)
     parser.add_argument(
         "--snp_range",
         type=str,
         default=None,
-        help="SNP range, e.g., `chr=1|start=0|end=500|chr_ref=2`. `chr_ref=all` means all 22 chromosomes.",
+        help="c1_s20_e1701_r1, '_rall' for all ref CHRs",
     )
-    parser.add_argument("--memory", type=int, default=512)
+    parser.add_argument("--memory", type=int, default=1024)
     parser.add_argument("--random_seed", type=int, default=0)
     parser.add_argument("--flag_full_ld", type=bool, default=False)
     parser.add_argument("--flag_cross_term", type=bool, default=False)

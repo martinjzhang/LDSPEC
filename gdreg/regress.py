@@ -7,93 +7,77 @@ import warnings
 
 
 def estimate(
-    dic_data,
     df_score,
     df_sumstats,
     df_annot,
     pannot_list=[],
     pannot_hr_list=[],
-    cross_term=False,
+    flag_cross_term=False,
     n_jn_block=100,
     sym_non_pAN="non-pAN",
     verbose=False,
 ):
     """
-    Multi-stage GDREG estimation.
+    GDREG estimation
 
     Parameters
     ----------
-    dic_data : dict
-        Genotype data reader, organized, for each CHR, as
-
-        - dic_data[CHR]['pgen'] : .pgen file path
-        - dic_data[CHR]['pvar'] : .pvar pd.DataFrame
-        - dic_data[CHR]['psam'] : .psam pd.DataFrame
-
     df_score : pd.DataFrame, default=None
-        GDReg LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'LD:AN:name',
-        'LD:AN:name', 'DLD:pAN:name', 'DLD:pAN:name']. Must contain 'LD:AN:allXX' where
+        GDREG LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'LD:AN:name1', 'LD:AN:name2', 
+        'LD:E', 'DLD:pAN:name1', 'DLD:pAN:name2', ...]. Must contain 'LD:AN:allXX' where
         XX is one of ["", "_common", "_ld", "_rare"].
 
     df_sumstats : pd.DataFrame
         Summary statistics with columns ['SNP', 'N', 'Z', 'A1', 'A2']
     df_annot : pd.DataFrame
-        Single-SNP annotation. Used in `gdreg.score.summarize`.
-    df_pannot_list : list of pd.DataFrame, default=[]
-        Each element corresponds to SNP-pair annotation. Must contain
-        ['CHR', 'SNP', 'BP', 'pAN:name'] columns.
-    df_pannot_hr_list : list of pd.DataFrame, default=[]
-        Each element corresponds to a high-res SNP-pair annotation. Must contain
-        ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:name'] columns.
-    cross_term : bool, default=False
+        Single-SNP annotation with columns ['CHR', 'SNP', 'BP', 'AN:name', ...]
+    pannot_list : list of pd.DataFrame, default=[]
+        Each element corresponds to a SNP-pair annotation with columns 
+        ['CHR', 'SNP', 'BP', 'pAN:name']
+    pannot_hr_list : list of pd.DataFrame, default=[]
+        Each element corresponds to a high-res SNP-pair annotation with columns 
+        ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:name']
+    flag_cross_term : bool, default=False
         If True, also use cross terms (Z_i Z_j) for regression, for SNP pairs i,j within
-        1000 SNPs and covered by at least one pannot.
+        10000 SNPs and covered by at least one pannot.
     n_jn_block : int, default=100
         Number of JN blocks.
     sym_non_pAN : str, default='non-pAN'
         Symbol for SNPs not in the SNP-pair annotation.
-    verbose : bool, default=False
-        If to output messages.
 
     Returns
     -------
     df_res : pd.DataFrame
-        GDREG regression results.
+        GDREG results.
+        
+        - dic_res[0] : regression using only LD scores.
+            - dic_res['term'] : regression terms
+            - dic_res['coef'] : regression coefficients
+            - dic_res['coef_jn'] : JN-debiased regression coefficients 
+            - dic_res['coef_jn_cov'] : regression coefficient covariance based on JN
+            - dic_res['summary'] : result summary
+        - dic_res[1] : regression using both LD and DLD scores, structure same as dic_res[0]
+        
 
-    TODO:
-    -----
-    - Update documentation.
+    TODO
+    ----
+    - Remove dic_data
     """
 
     start_time = time.time()
     if verbose:
         print("# Call: gdreg.regress.estimate")
 
-    # df_snp from dic_data
-    CHR_list = sorted(dic_data)
-    df_snp = None
-    for CHR in CHR_list:
-        if df_snp is None:
-            df_snp = dic_data[CHR]["pvar"].copy()
-        else:
-            df_snp = pd.concat([df_snp, dic_data[CHR]["pvar"]], axis=0)
-
-    if verbose:
-        print(
-            "    dic_data : n_snp=%d, n_sample=%d" % (df_snp.shape[0], df_snp.shape[0])
-        )
-
     # df_score
     df_score.index = df_score["SNP"]
-    df_score = df_score.loc[df_score.isna().sum(axis=1) == 0].copy()  # TODO
+    ind_rm = df_score.isna().sum(axis=1) > 0
+    df_score = df_score.loc[~ind_rm].copy()
     LD_list = [x for x in df_score if x.startswith("LD:")]
     DLD_list = [x for x in df_score if x.startswith("DLD:")]
     assert "E" in df_score, "'E' not in df_score"
     if verbose:
-        print(
-            "    df_score : n_snp=%d, %d LD scores, %s DLD scores"
-            % (df_score.shape[0], len(LD_list), len(DLD_list))
-        )
+        print("    df_score : remove %d rows with NA values, %d remaining" % (ind_rm.sum(), df_score.shape[0]))
+        print("        %d LD scores, %s DLD scores" % (len(LD_list), len(DLD_list)) )
 
     # df_sumstats
     n_sample_zsq = df_sumstats["N"].mean().astype(int)
@@ -116,36 +100,28 @@ def estimate(
         )
 
     # df_reg
-    df_reg = df_score[["SNP", "CHR", "BP"]].copy()
-    if cross_term is False:
-        ind_select = ["|" not in x for x in df_reg["SNP"]]
-        df_reg = df_reg.loc[ind_select].copy()
+    if flag_cross_term:
+        df_reg = df_score[["SNP", "CHR", "BP"]].copy()
+    else: 
+        ind_select = ["|" not in x for x in df_score["SNP"]]
+        df_reg = df_score.loc[ind_select, ["SNP", "CHR", "BP"]].copy()
     df_reg.drop_duplicates("SNP", inplace=True)
     df_reg["SNP1"] = [x.split("|")[0] for x in df_reg["SNP"]]
     df_reg["SNP2"] = [x.split("|")[-1] for x in df_reg["SNP"]]
     df_reg = df_reg.loc[(df_reg["SNP1"].isin(dic_zsc)) & (df_reg["SNP2"].isin(dic_zsc))]
     df_reg["ZSQ"] = [dic_zsc[x] * dic_zsc[y] for x, y in zip(df_reg["SNP1"], df_reg["SNP2"])]
-    #     df_reg = df_snp.copy()
-    #     df_reg.drop_duplicates("SNP", inplace=True)
-    #     df_reg = df_reg.loc[df_reg["SNP"].isin(df_score["SNP"])]
-    #     df_reg = df_reg.loc[df_reg["SNP"].isin(dic_zsc)]
-    #     df_reg["ZSQ"] = [dic_zsc[x]**2 for x in df_reg["SNP"]]
     df_reg.index = df_reg["SNP"]
     df_reg.sort_values(by=["CHR", "BP"], inplace=True)
-#     dic_block = get_block(df_reg, pannot_list, sym_non_pAN, n_jn_block)
 
     if verbose:
-        print(
-            "    Regression : n_sample=%d (SNP or SNP pairs), n_block=%d"
-            % (df_reg.shape[0], n_jn_block)
-        )
+        print("    Regression : n_rows=%d, n_block=%d" % (df_reg.shape[0], n_jn_block) )
 
     # Regression : LD-score only and estimate \tau (using squared terms only)
-    dic_res = {}
+    dic_res = {}      
     temp_df_reg = df_reg.join(df_score[LD_list + ["E"]])
-    if cross_term is True:
+    if flag_cross_term: # Remove cross terms if flag_cross_term==True
         ind_select = ["|" not in x for x in temp_df_reg["SNP"]]
-        temp_df_reg = temp_df_reg.loc[ind_select].copy()
+        temp_df_reg = temp_df_reg.loc[ind_select]
     dic_block = get_block(temp_df_reg, pannot_list, sym_non_pAN, n_jn_block)    
     dic_res[0] = regress(
         temp_df_reg,
@@ -207,27 +183,32 @@ def summarize(
         - dic_res['coef_jn_cov'] : estimated coef covariance. np.ndarray(dtype=np.float32).
 
     df_annot : pd.DataFrame
-        Single-SNP annotation. Used in `gdreg.score.compute_score`.
-    df_pannot_list : list of pd.DataFrame, default=[]
-        Each element corresponds to SNP-pair annotation. Must contain
-        ['CHR', 'SNP', 'BP', 'pAN:pAN1'] columns. Used in `gdreg.score.compute_score`.
-    df_pannot_hr_list : list of pd.DataFrame, default=[]
-        Each element corresponds to a high-res SNP-pair annotation. Must contain
-        ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:pAN1'] columns. Used in
-        `gdreg.score.compute_score`.
+        Single-SNP annotation with columns ['CHR', 'SNP', 'BP', 'AN:name', ...]
+    pannot_list : list of pd.DataFrame, default=[]
+        Each element corresponds to a SNP-pair annotation with columns 
+        ['CHR', 'SNP', 'BP', 'pAN:name']
+    pannot_hr_list : list of pd.DataFrame, default=[]
+        Each element corresponds to a high-res SNP-pair annotation with columns 
+        ['CHR', 'SNP', 'BP', 'pCHR', 'pSNP', 'pBP', 'pAN:name']
     sym_non_pAN : str, default='non-pAN'
         Symbol for SNPs not in the SNP-pair annotation.
-    n_block: int, default=100
-        Number of jackknife blocks.
 
     Returns
     -------
     df_summary : pd.DataFrame
         Regression result summary.
+        
+        - tau,tau_se : \tau coefficient
+        - h2,h2_se : total heritability of SNPs in a given annot
+        - enrich,enrich_se : heritability enrichment
+        - rho,rho_se : \rho coefficient
+        - cov,cov_se : total covariance of SNP pairs in a given pannot
+        - r2,r2_se : `cov` divided by total \sqrt{ h_ps_i h_ps_j } of SNP pairs in a given pannot,
+            where h_ps_i is the per-SNP heritablity of SNP i. `r2_se` based on if `cov` is
+            significantly different from 0.
 
     TODO
     ----
-    1. Double check later.
 
     """
 
@@ -269,11 +250,10 @@ def summarize(
         dic_mat_G[pAN] = mat_G.copy()
 
     # Results info
-    LD_list = [x for x in dic_res["term"] if x.startswith("LD:")]
-    DLD_list = [x for x in dic_res["term"] if x.startswith("DLD:")]
-
-    res_AN_list = [x.replace("LD:", "") for x in LD_list]
-    res_pAN_list = sorted(set([x.replace("DLD:", "").split("|")[0] for x in DLD_list]))
+    res_LD_list = [x for x in dic_res["term"] if x.startswith("LD:")]
+    res_AN_list = [x.replace("LD:", "") for x in res_LD_list]
+    res_DLD_list = [x for x in dic_res["term"] if x.startswith("DLD:")]
+    res_pAN_list = sorted(set([x.replace("DLD:", "").split("|")[0] for x in res_DLD_list]))
 
     # Check consistency between results and annotation df_annot
     err_msg = "df_annot does not contain all annots in dic_res"
@@ -305,47 +285,46 @@ def summarize(
             "n_snp_pair": [dic_mat_G[x].sum() for x in res_pAN_list],
             "rho": [dic_coef["DLD:%s" % x] for x in res_pAN_list],
             "rho_se": [dic_coef_se["DLD:%s" % x] for x in res_pAN_list],
-            "cov": np.nan,
+            "cov": np.nan, # Avg. cov
             "cov_se": np.nan,
-            "r2": np.nan,
+            "r2": np.nan, # Avg. cor
             "r2_se": np.nan,
         },
     )
 
-    # Summary : h2 & h2_se & enrich
-    # TODO : check
+    # Summary : h2, h2_se, enrich, enrich_se
     df_cov = pd.DataFrame(
         index=dic_res["term"], columns=dic_res["term"], data=dic_res["coef_jn_cov"]
     )
-    temp_mat = df_cov.loc[LD_list, LD_list].values
+    temp_mat = df_cov.loc[res_LD_list, res_LD_list].values
     for AN in res_AN_list:
-        if len(set(df_annot[AN])) > 2:
+        if set(df_annot[AN]) != set([False, True]): # same as set([0, 1])
             continue
-
+        
         temp_v = df_annot.loc[df_annot[AN] == 1, res_AN_list].sum(axis=0).values
+        
+        # h2, h2_se
         df_sum_tau.loc[AN, "h2"] = (temp_v * df_sum_tau["tau"]).sum()
         df_sum_tau.loc[AN, "h2_se"] = np.sqrt(temp_v.dot(temp_mat).dot(temp_v))
 
-        # enrich
-        # determine reference annotation
-        # TODO : check
-        ind_ref = np.ones(df_annot.shape[0], dtype=bool)
-        for term in ["_common", "_lf", "_rare"]:
+        # enrich, enrich_se
+        ind_ref = np.ones(df_annot.shape[0], dtype=bool) # determine reference annotation
+        for term in ["_common", "_lf", "_rare"]: # if not, use all SNPs as ref
             if AN.endswith(term):
                 col_list = [x for x in df_annot if x.endswith(term)]
                 ind_ref = (df_annot[col_list].values == 1).sum(axis=1) > 0
         temp_v_ref = df_annot.loc[ind_ref, res_AN_list].sum(axis=0).values
 
-        n_snp_cate = (df_annot[AN] == 1).sum()
-        n_snp_dif = ind_ref.sum() - n_snp_cate
-        if n_snp_dif < n_snp_cate * 0.1:
-            continue
+        n_snp_AN = (df_annot[AN] == 1).sum()
+        n_snp_dif = ind_ref.sum() - n_snp_AN
+        if n_snp_dif < n_snp_AN * 0.1: continue
+            
         temp_v_combine = (
-            temp_v * (1 / n_snp_cate + 1 / n_snp_dif) - temp_v_ref / n_snp_dif
+            temp_v * (1 / n_snp_AN + 1 / n_snp_dif) - temp_v_ref / n_snp_dif
         )
 
         h2_ps_ref = (temp_v_ref * df_sum_tau["tau"]).sum() / ind_ref.sum()
-        df_sum_tau.loc[AN, "enrich"] = df_sum_tau.loc[AN, "h2"] / n_snp_cate / h2_ps_ref
+        df_sum_tau.loc[AN, "enrich"] = df_sum_tau.loc[AN, "h2"] / n_snp_AN / h2_ps_ref
 
         dif_ = (temp_v_combine * df_sum_tau["tau"]).sum()
         se_ = np.sqrt(temp_v_combine.dot(temp_mat).dot(temp_v_combine))
@@ -353,22 +332,23 @@ def summarize(
             se_ / dif_ * (df_sum_tau.loc[AN, "enrich"] - 1)
         )
 
-    # Summary : r2 and per-pannot r2
-    temp_mat = df_cov.loc[DLD_list, DLD_list].values
-    v_persnp_h2 = np.zeros(df_annot.shape[0])
+    # Summary : cov, cov_se, r2, r2_se
+    temp_mat = df_cov.loc[res_DLD_list, res_DLD_list].values
+    v_persnp_h2 = np.zeros(df_annot.shape[0], dtype=np.float32)
     for AN in res_AN_list:
         v_persnp_h2 += df_sum_tau.loc[AN, "tau"] * df_annot[AN]
-    v_persnp_h2_sqrt = np.sqrt(v_persnp_h2)
+    v_persnp_h2_sqrt = np.sqrt(v_persnp_h2).astype(np.float32)
 
     for pAN in res_pAN_list:
 
         n_snp_pair = df_sum_rho.loc[pAN, "n_snp_pair"]
         temp_v = np.array([(dic_mat_G[pAN] * dic_mat_G[x]).sum() for x in res_pAN_list])
+        
+        # cov, cov_se
         df_sum_rho.loc[pAN, "cov"] = (temp_v * df_sum_rho["rho"]).sum()
         df_sum_rho.loc[pAN, "cov_se"] = np.sqrt(temp_v.dot(temp_mat).dot(temp_v))
 
         # r2 and r2_se
-        # TODO : rethink how to define r2_se
         var_total = dic_mat_G[pAN].dot(v_persnp_h2_sqrt).T.dot(v_persnp_h2_sqrt)
         df_sum_rho.loc[pAN, "r2"] = df_sum_rho.loc[pAN, "cov"] / var_total
         df_sum_rho.loc[pAN, "r2_se"] = df_sum_rho.loc[pAN, "cov_se"] / var_total
@@ -384,11 +364,11 @@ def get_block(df_reg, pannot_list=[], sym_non_pAN="non-pAN", n_block=100):
     Parameters
     ----------
     df_reg : pd.DataFrame
-        SNPs used in regression. Assumed to be sorted by genomic location.
-        Should contain ['CHR', 'SNP', 'BP', 'SNP1', 'SNP2', 'ZSQ'].
+        SNPs used in regression. Must be sorted by genomic location. Must contain 
+        ['CHR', 'SNP', 'SNP1', 'SNP2'].
     pannot_list : list of pd.DataFrame, default=[]
-        Each element corresponds to SNP-pair annotation. Must contain
-        ['CHR', 'SNP', 'BP', 'pAN:pAN1'] columns.
+        Each element corresponds to a SNP-pair annotation with columns 
+        ['CHR', 'SNP', 'BP', 'pAN:name']
     sym_non_pAN : str, default='non-pAN'
         Symbol for SNPs not in the SNP-pair annotation.
     n_block: int, default=100
@@ -407,21 +387,35 @@ def get_block(df_reg, pannot_list=[], sym_non_pAN="non-pAN", n_block=100):
     n_snp = df_reg.shape[0]
     block_size = np.ceil(n_snp / n_block).astype(int)
 
-    # Places to make a split
+    # Split locations
     cut_set = set([0, n_snp])
     temp_v = df_reg["CHR"].values
     cut_set.update(np.arange(1, n_snp)[temp_v[1:] != temp_v[:-1]])
 
-    # Places not to make a split
+    # Non-split locations
     nocut_set = set()
     for df_pannot in pannot_list:
         pAN = [x for x in df_pannot if x.startswith("pAN")][0]
         temp_dic = {x: y for x, y in zip(df_pannot["SNP"], df_pannot[pAN])}
+        
+        # SNP1 
         temp_v = np.array(
             [temp_dic[x] if x in temp_dic else sym_non_pAN for x in df_reg["SNP1"]]
         )
-        ind_select = (temp_v[1:] == temp_v[:-1]) & (temp_v[1:] != sym_non_pAN)
-        nocut_set.update(np.arange(1, n_snp)[ind_select])
+        ind_select1 = (temp_v[1:] == temp_v[:-1]) & (temp_v[1:] != sym_non_pAN)
+        # SNP2
+        temp_v = np.array(
+            [temp_dic[x] if x in temp_dic else sym_non_pAN for x in df_reg["SNP2"]]
+        )
+        ind_select2 = (temp_v[1:] == temp_v[:-1]) & (temp_v[1:] != sym_non_pAN)
+        
+        nocut_set.update(np.arange(1, n_snp)[ind_select1 | ind_select2])
+        
+#         temp_v = np.array(
+#             [temp_dic[x] if x in temp_dic else sym_non_pAN for x in df_reg["SNP1"]]
+#         )
+#         ind_select = (temp_v[1:] == temp_v[:-1]) & (temp_v[1:] != sym_non_pAN)
+#         nocut_set.update(np.arange(1, n_snp)[ind_select])
 
     dic_block, i_block, ind_s = {}, 0, 0
     for i in range(1, n_snp + 1):
@@ -441,24 +435,18 @@ def regress(
 ):
 
     """
-    Single-pass regression (being called by the multi-stage regression `regress`).
+    GDREG regression
 
     Parameters
     ----------
     df_reg : pd.DataFrame
         GDReg LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'SNP1', 'SNP2', 'ZSQ',
-        'LD:AN1', 'LD:AN2', 'DLD:PAN:AN1', 'DLD:PAN:AN2']. If `SNP1|SNP2` in `df_reg`,
-        `SNP1` and `SNP2` must also be in `df_reg`.
+        'LD:AN:name1', 'LD:AN:name2', 'DLD:pAN:name1', 'DLD:pAN:name2', ...]. 
+        If `SNP1|SNP2` in `df_reg`, `SNP1` and `SNP2` must both be in `df_reg`.
     dic_block : dict
         Block information. `dic_block[i] = (ind_s, ind_e)`.
     n_sample_zsq : int
         Number of samples used to compute the sumstats.
-    dic_block : dict
-        Block information. `dic_block[i] = [ind_s, ind_e]`.
-    flag_tau_only : bool
-        If true, only regress for \tau (not \tau and \rho).
-    verbose : bool, default=False
-        If to output messages.
 
     Returns
     -------
@@ -474,8 +462,8 @@ def regress(
 
     start_time = time.time()
 
-    n_snp = df_reg.shape[0]
-    CHR_list = sorted(set(df_reg["CHR"]))
+#     n_snp = df_reg.shape[0]
+#     CHR_list = sorted(set(df_reg["CHR"]))
 
     LD_list = [x for x in df_reg if x.startswith("LD:")]
     DLD_list = [x for x in df_reg if x.startswith("DLD:")]
@@ -494,23 +482,27 @@ def regress(
         )
 
     # Regression weights
-    # 1. LD : 1 / l_i for Z_i^2 and 1 / l_ij for Z_i Z_j
-    # 2. Zsq variance : 1 / (1 + N h_g^2 l_j / M) ^ 2
-    #    - Z_i^2 : 2 * (N l_i + 1) ^ 2
-    #    - Z_i Z_j : (N l_i + 1) (N l_j + 1) + (N l_ij + 1) ^ 2
     # TODO : Balance Z_i^2 and Z_i Z_j
+    # 1. LD weights (clipped at max=10)
+    #    - Z_i^2 : 1 / l_i, where l_i = \sum_j r_ij^2
+    #    - Z_i Z_j : 1 / l_ij, where l_ij = \sum_k r_ik r_jk
     temp_list = [
         x for x in df_reg if x.startswith("LD:AN:all") | x.startswith("LD:AN:ALL")
     ]
-    v_ld = df_reg[temp_list].sum(axis=1).values.clip(min=0.1)
-    dic_ld = {(x, y): z for x, y, z in zip(df_reg["SNP1"], df_reg["SNP2"], v_ld)}
+    v_ld = df_reg[temp_list].sum(axis=1).values.clip(min=0.1)    
+    # 2. Zsq variance weights : (clipped at max=10)
+    #    - Z_i^2 : 1 / [ 2 (N l_i / M + 1) ^ 2 ]
+    #    - Z_i Z_j : 1 / [ (N l_i / M + 1) (N l_j / M + 1) + (N l_ij / M + 1) ^ 2 ]
+    # 
     n_snp = (df_reg["SNP1"]==df_reg["SNP2"]).sum()
+    dic_ld = {(x, y): z for x, y, z in zip(df_reg["SNP1"], df_reg["SNP2"], v_ld)}
     v_zsq_var = [
-        (n_sample_zsq / n_snp * dic_ld[(s1, s1)] + 1) * (n_sample_zsq / n_snp * dic_ld[(s2, s2)] + 1)
-        + (n_sample_zsq / n_snp * dic_ld[(s1, s2)] + ld_e) ** 2
+        (n_sample_zsq * dic_ld[(s1, s1)] / n_snp + 1) * (n_sample_zsq * dic_ld[(s2, s2)] / n_snp + 1)
+        + (n_sample_zsq * dic_ld[(s1, s2)] / n_snp + ld_e) ** 2
         for s1, s2, ld_e in zip(df_reg["SNP1"], df_reg["SNP2"], df_reg["E"])
     ]
     v_zsq_var = np.array(v_zsq_var, dtype=np.float32).clip(min=0.1)
+        
     v_w = np.sqrt(1 / v_ld / v_zsq_var).astype(np.float32)
     v_w = v_w / v_w.mean()
 
@@ -614,7 +606,6 @@ def reg_bjn(v_y, mat_X, dic_block, verbose=False):
         mat_xtx_block = mat_xtx - np.dot(mat_X_block.T, mat_X_block) / n_sample
         mat_xty_block = mat_xty - np.dot(mat_X_block.T, v_y_block) / n_sample
         coef_block[i, :] = np.linalg.solve(mat_xtx_block, mat_xty_block).reshape([-1])
-    #     print(coef_block)
 
     # Jacknife : mean & covariance
     v_h = n_sample / v_block_size
