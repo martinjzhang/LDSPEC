@@ -282,6 +282,7 @@ def main(args):
                 temp_mat = np.zeros([n_snp, ind_e - ind_s], dtype=np.float32)
                 temp_mat[ind_s_ref:ind_e_ref, :] = mat_ld
                 mat_ld_list.append(sp.sparse.csc_matrix(temp_mat))
+                del temp_mat
 
             mat_ld = sp.sparse.hstack(mat_ld_list, format="csc")
             sp.sparse.save_npz(PREFIX_OUT + ".%s_ld" % SNP_RANGE, mat_ld)

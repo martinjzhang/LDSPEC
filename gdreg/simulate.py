@@ -602,6 +602,7 @@ def compute_sumstats(df_phen, dic_data, block_size=500, verbose=False):
             mat_X = (mat_X - 2 * v_maf) / np.sqrt(2 * v_maf * (1 - v_maf))
 
             v_sumstats.extend(v_phen.T.dot(mat_X) / np.sqrt(N_chr))
+            print("    CHR %d, block %d/%d" % (CHR, i, n_block_chr))
 
         temp_df = pd.DataFrame(
             data={

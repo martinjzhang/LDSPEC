@@ -57,24 +57,26 @@ def compute_ld(
     n_snp_ref = ind_e_ref - ind_s_ref
 
     # block_size_tar, block_size_ref, block_size_sample
-    mem_ld = 2 * (n_snp_ref * n_snp_tar * 4) / 1024**2
-    mem_geno_persnp = (
-        n_sample * (1 + 0.5 * 2) / 1024**2
-    )  # Sparse matrix takes half of memory
-    block_size_tot = (memory - mem_ld - 20) / mem_geno_persnp
-    block_size_tar = int(block_size_tot * n_snp_ref / (n_snp_tar + n_snp_ref))
-    block_size_tar = min(
-        block_size_tar, n_snp_tar
-    )  # block_size_tar may be large than n_snp_tar
-    block_size_ref = block_size_tot - block_size_tar
-    #     block_size_ref = int(block_size_tot * n_snp_tar / (n_snp_tar + n_snp_ref))
+#     mem_ld = 2 * (n_snp_ref * n_snp_tar * 4) / 1024**2
+#     mem_geno_persnp = (
+#         n_sample * (1 + 0.5 * 2) / 1024**2
+#     )  # Sparse matrix takes half of memory
+#     block_size_tot = (memory - mem_ld - 20) / mem_geno_persnp
+#     block_size_tar = int(block_size_tot * n_snp_ref / (n_snp_tar + n_snp_ref))
+#     block_size_tar = min(
+#         block_size_tar, n_snp_tar
+#     )  # block_size_tar may be large than n_snp_tar
+#     block_size_ref = block_size_tot - block_size_tar
+#     #     block_size_ref = int(block_size_tot * n_snp_tar / (n_snp_tar + n_snp_ref))
+    block_size_tar = n_snp_tar
+    block_size_ref = 1000
     block_size_sample = 16383
 
-    err_msg = "block_size_tot=%d too small, allocate at least %dMB memory" % (
-        block_size_tot,
-        mem_ld + mem_geno_persnp * 2048 + 20,
-    )
-    assert block_size_tot > 2048, err_msg
+#     err_msg = "block_size_tot=%d too small, allocate at least %dMB memory" % (
+#         block_size_tot,
+#         mem_ld + mem_geno_persnp * 2048 + 20,
+#     )
+#     assert block_size_tot > 2048, err_msg
 
     n_block_tar = np.ceil(n_snp_tar / block_size_tar).astype(int)
     n_block_ref = np.ceil(n_snp_ref / block_size_ref).astype(int)
