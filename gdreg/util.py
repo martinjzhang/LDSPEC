@@ -90,7 +90,7 @@ def reg(mat_Y, mat_X):
 
 
 ################################################################################
-################################## GDReg model #################################
+################################## GDREG model #################################
 ################################################################################
 def pannot_to_csr(v_gene, sym_non_pAN="non-pAN", flag_matS=True):
     """Convert .pannot to a sparse indicator matrix
@@ -178,6 +178,56 @@ def pannot_hr_to_csr(v_snp, snp_pair_list):
     mat_G = sp.sparse.csr_matrix(
         ([True] * len(row_ind), (row_ind, col_ind)), shape=[n_snp, n_snp], dtype=bool
     )
+    return mat_G
+
+
+def pannot_hr_to_csr_block(v_snp, snp_pair_list, block_size=int(1e6), verbose=False):
+    """Convert .pannot_hr to a sparse indicator matrix by blocks to avoid large set operations
+
+    Parameters
+    ----------
+    v_snp : np.ndarray (list-like)
+        List of SNPs.
+    snp_pair_list : list of lists
+        List of SNP pairs.
+    block_size : int
+
+    Returns
+    -------
+    mat_G : sp.sparse.csr(dtype=bool)
+        SNP-pair annotation indicator matrix of shape (n_snp, n_snp). Diagonal
+        elements are zero.
+    """
+    n_snp = len(v_snp)
+    dic_snp = {snp: i for i, snp in enumerate(v_snp)}
+    mat_G = None
+
+    n_block = np.ceil(len(snp_pair_list) / block_size).astype(int)
+    
+    for i_block in range(n_block):        
+        if verbose:
+            print("Block %d/%d" % (i_block, n_block))
+        ind_set = set()
+        ind_s = i_block * block_size
+        ind_e = min((i_block+1)*block_size, len(snp_pair_list))
+        for s1, s2 in snp_pair_list[ind_s: ind_e]:
+            ind_set.add((dic_snp[s1], dic_snp[s2]))
+            ind_set.add((dic_snp[s2], dic_snp[s1]))
+
+        row_ind = []
+        col_ind = []
+        for i, j in ind_set:
+            row_ind.append(i)
+            col_ind.append(j)
+
+        temp_mat_G = sp.sparse.csr_matrix(
+            ([True] * len(row_ind), (row_ind, col_ind)), shape=[n_snp, n_snp], dtype=bool
+        )
+        
+        if mat_G is None:
+            mat_G = temp_mat_G.copy()
+        else:
+            mat_G = mat_G + temp_mat_G
     return mat_G
 
 
@@ -424,10 +474,9 @@ def write_annot(df_annot, fpath):
 
     Parameters
     ----------
-    df_annot: pd.DataFrame
+    df_annot : pd.DataFrame
         Annotations.
-
-    fpath: str
+    fpath : str
         Output file.
     """
 
@@ -485,7 +534,7 @@ def write_annot(df_annot, fpath):
     return
 
 
-def read_annot(fpath):
+def read_annot(fpath, nrows=None):
     """
     Read annotation files, in `.tsv.gz` format.
 
@@ -497,7 +546,7 @@ def read_annot(fpath):
 
     Parameters
     ----------
-    fpath: str
+    fpath : str
         Annotation file path.
 
     Returns
@@ -519,15 +568,15 @@ def read_annot(fpath):
 
     # Read .annot.gz file
     if fpath.endswith(".annot.gz"):
-        df_annot = pd.read_csv(fpath, sep="\t", compression="gzip")
+        df_annot = pd.read_csv(fpath, sep="\t", nrows=nrows, compression="gzip")
 
     # Read .pannot.gz file
     if fpath.endswith(".pannot.gz"):
-        df_annot = pd.read_csv(fpath, sep="\t", compression="gzip")
+        df_annot = pd.read_csv(fpath, sep="\t", nrows=nrows, compression="gzip")
 
     # Read .pannot_hr.gz file
     if fpath.endswith(".pannot_hr.gz"):
-        df_annot = pd.read_csv(fpath, sep="\t", compression="gzip")
+        df_annot = pd.read_csv(fpath, sep="\t", nrows=nrows, compression="gzip")
 
     # Check columns
     df_annot.columns = update_columns(df_annot.columns)
@@ -551,6 +600,76 @@ def read_annot(fpath):
                 )
 
     return df_annot
+
+
+def get_annot_name_from_file(annot_file):
+    """ 
+    Get annotation name from file path. annot_file must end with 
+    `.annot.gz` or `.pannot_mat.npz`.
+    """
+    annot_name = annot_file.split(os.path.sep)[-1]
+    # Suffix
+    if annot_name.endswith(".annot.gz"):
+        annot_type = "AN:"
+        annot_name = annot_name.replace(".annot.gz", "")
+    elif annot_name.endswith(".pannot_mat.npz"):
+        annot_type = "pAN:"
+        annot_name = annot_name.replace(".pannot_mat.npz", "")
+    else:
+        raise ValueError("annot_file must end with '.annot.gz' or '.pannot_mat.npz'")    
+    # CHR indicator
+    annot_name = annot_name.replace("CHR@", "")
+    annot_name = annot_name.replace("chr@", "")
+    annot_name = annot_name.replace("C@", "")
+    annot_name = annot_name.replace("c@", "")
+    # Formatting 
+    annot_name = annot_name.replace(".", "_")
+    annot_name = annot_name.replace("__", "_")
+    annot_name = annot_name.strip("._,:")
+    annot_name = annot_type + annot_name
+    return annot_name
+
+
+def write_pannot_mat(snp_pair_list, snp_list, prefix_out):
+    """
+    Write SNP-pair annotation matrix '.pannot_mat.npz' with respect to .pvar SNPs.
+
+    Parameters
+    ----------
+    snp_pair_list : list of lists
+        List of SNP pairs
+    snp_list : list
+        List of SNPs
+    prefix_out : str
+        Output prefix
+    """    
+    mat_G = pannot_hr_to_csr_block(snp_list, snp_pair_list, verbose=False)
+    sp.sparse.save_npz(prefix_out + ".pannot_mat", mat_G)
+
+
+def read_pannot_mat(fpath):
+    """
+    Read SNP-pair annotation matrix '.pannot_mat.npz' files.
+
+    Parameters
+    ----------
+    fpath : str
+        Annotation file path.
+
+    Returns
+    -------
+    snp_pair_list : pd.DataFrame
+        List of SNP pairs.
+    pAN : str
+        Annotation name.
+    """
+    
+    # Check fpath
+    err_msg = "fpath should end with '.pannot_mat.npz'"
+    assert fpath.endswith(".pannot_mat.npz"), err_msg
+    
+    mat_pannot = sp.sparse.load_npz(fpath)
+    return mat_pannot
 
 
 def read_ld(fpath):
@@ -660,6 +779,14 @@ def parse_snp_range(snp_range):
 
 #     return dic_snp_range
 
+
+def get_mbin(maf):
+    if maf>=0.05:
+        return "common"
+    elif maf>=0.005:
+        return "lf"
+    else:
+        return "rare"
 
 ################################################################################
 ###################################### CLI #####################################
