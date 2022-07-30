@@ -166,7 +166,7 @@ def main(args):
             % (len(chr_list_score), ",".join(["%d" % x for x in chr_list_score]))
         )
 
-        chr_list_score = [21, 22]
+#         chr_list_score = [21, 22]
         df_score = None
         for score_file in SCORE_FILE.split(","):
             df_list = []
@@ -263,7 +263,7 @@ def main(args):
                     % (annot_name, len(dic_pannot_path[annot_name]), CHR)
                 )
 
-        # Checking CHR_set
+        # Check CHR_set
         if len(dic_annot_path) > 0:
             annot_name = list(dic_annot_path)[0]
             CHR_set = set(dic_annot_path[annot_name])
@@ -280,6 +280,22 @@ def main(args):
             "    Detected %d CHRs for all files : %s"
             % (len(CHR_set), ",".join(["%d" % x for x in CHR_set]))
         )
+        
+        # Check if having all annots/pannots
+        AN_list_score = [x.replace("LD:","") for x in df_score if x.startswith("LD:")]
+        pAN_list_score = [x.replace("DLD:","") for x in df_score if x.startswith("DLD:")]
+        AN_list, CHR = [], list(CHR_set)[0]
+        for annot_name in dic_annot_path:
+            temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR], nrows=5)
+            AN_list.extend([x for x in temp_df if x.startswith("AN:")])
+        pAN_list = list(dic_pannot_path)
+
+        temp_list = list(set(AN_list_score) - set(AN_list))
+        assert len(temp_list)==0, "Missing annots: %s" % ",".join(temp_list)
+        temp_list = list(set(pAN_list_score) - set(pAN_list))
+        assert len(temp_list)==0, "Missing pannots: %s" % ",".join(temp_list)
+        
+        print("    ANNOT_FILE match with SCORE_FILE")
 
     ###########################################################################################
     ######                                  Computation                                  ######
@@ -410,9 +426,9 @@ def main(args):
         dbfile = open(PREFIX_OUT + ".pickle", "wb")
         pickle.dump(dic_res, dbfile)
         dbfile.close()
-        dic_res[0]["summary"]["tau"].to_csv(
-            PREFIX_OUT + ".tau.tsv", sep="\t", index=False
-        )
+#         dic_res[0]["summary"]["tau"].to_csv(
+#             PREFIX_OUT + ".tau.tsv", sep="\t", index=False
+#         )
         dic_res[1]["summary"]["tau"].to_csv(
             PREFIX_OUT + ".joint_tau.tsv", sep="\t", index=False
         )
