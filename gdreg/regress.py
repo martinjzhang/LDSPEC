@@ -281,7 +281,8 @@ def summarize(
     dic_pAN_n_pair = {x: 0 for x in res_pAN_list}
     dic_pAN_v = {x: np.zeros(len(res_pAN_list), dtype=np.float32) for x in res_pAN_list}
     dic_pAN_var_total = {x: 0 for x in res_pAN_list}
-
+    
+#     CHR_list = [21, 22]
     for CHR in CHR_list:
         # df_annot_chr
         df_annot_chr = dic_data[CHR]["pvar"][["SNP"]].copy()
@@ -333,7 +334,8 @@ def summarize(
         for pAN in res_pAN_list:
             dic_pAN_n_pair[pAN] = dic_pAN_n_pair[pAN] + dic_mat_G_chr[pAN].sum()
             temp_list = [
-                (dic_mat_G_chr[pAN] * dic_mat_G_chr[x]).sum() for x in res_pAN_list
+#                 (dic_mat_G_chr[pAN] * dic_mat_G_chr[x]).sum() for x in res_pAN_list
+                dic_mat_G_chr[pAN].multiply(dic_mat_G_chr[x]).sum() for x in res_pAN_list
             ]
             dic_pAN_v[pAN] = dic_pAN_v[pAN] + np.array(temp_list, dtype=np.float32)
             dic_pAN_var_total[pAN] = dic_pAN_var_total[pAN] + dic_mat_G_chr[pAN].dot(
