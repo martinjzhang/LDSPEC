@@ -131,39 +131,19 @@ def estimate(
     if verbose:
         print("    Regression : n_rows=%d, n_block=%d" % (df_reg.shape[0], n_jn_block))
 
-    # Regression : LD-score only and estimate \tau (using squared terms only)
+    # Regression
     dic_res = {}
-#     temp_df_reg = df_reg.join(df_score[LD_list + ["E"]])
-#     if flag_cross_term:  # Remove cross terms if flag_cross_term==True
-#         ind_select = ["|" not in x for x in temp_df_reg["SNP"]]
-#         temp_df_reg = temp_df_reg.loc[ind_select]
-#     dic_block = get_block(temp_df_reg, n_block=n_jn_block)
-#     dic_res[0] = regress(
-#         temp_df_reg,
-#         dic_block,
-#         n_sample_zsq,
-#         verbose=verbose,
-#         verbose_prefix="    ",
-#     )
-#     dic_res[0]["summary"] = summarize(
-#         dic_res[0],
-#         dic_data,
-#         dic_annot_path=dic_annot_path,
-#         dic_pannot_path=dic_pannot_path,
-#     )
-
-    # Regression : both \tau and \rho
     temp_df_reg = df_reg.join(df_score[LD_list + DLD_list + ["E"]])
     dic_block = get_block(temp_df_reg, n_block=n_jn_block)
-    dic_res[1] = regress(
+    dic_res = regress(
         temp_df_reg,
         dic_block,
         n_sample_zsq,
         verbose=verbose,
         verbose_prefix="    ",
     )
-    dic_res[1]["summary"] = summarize(
-        dic_res[1],
+    dic_res["summary"] = summarize(
+        dic_res,
         dic_data,
         dic_annot_path=dic_annot_path,
         dic_pannot_path=dic_pannot_path,
@@ -287,7 +267,7 @@ def summarize(
         },
     )
     
-    return {"tau": df_sum_tau, "rho": df_sum_rho}
+#     return {"tau": df_sum_tau, "rho": df_sum_rho}
 
     # Iterate over CHR_list to collect info
     dic_AN_n_snp = {x: 0 for x in res_AN_list}
