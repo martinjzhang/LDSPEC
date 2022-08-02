@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import scipy as sp
+from scipy import stats
 from scipy import sparse
 import pgenlib as pg
 import os
@@ -87,6 +88,55 @@ def reg(mat_Y, mat_X):
         mat_coef = mat_coef.reshape([-1])
 
     return mat_coef
+
+
+def meta_analysis(effects, se, method='random', weights=None):
+    """ Random effect meta analysis
+    """
+    # From Omer Weissbrod
+    assert method in ['fixed', 'random']
+    d = effects
+    variances = se**2
+    
+    #compute random-effects variance tau2
+    vwts = 1.0 / variances
+    fixedsumm = vwts.dot(d) / vwts.sum()    
+    Q = np.sum(((d - fixedsumm)**2) / variances)
+    df = len(d)-1
+    tau2 = np.maximum(0, (Q-df) / (vwts.sum() - vwts.dot(vwts) / vwts.sum()))
+    
+    #defing weights
+    if weights is None:
+        if method == 'fixed':
+            wt = 1.0 / variances
+        else:
+            wt = 1.0 / (variances + tau2)
+    else:
+        wt = weights
+    
+    #compute summtest
+    summ = wt.dot(d) / wt.sum()
+    if method == 'fixed':
+        varsum = np.sum(wt*wt*variances) / (np.sum(wt)**2)
+    else:
+        varsum = np.sum(wt*wt*(variances+tau2)) / (np.sum(wt)**2)
+    ###summtest = summ / np.sqrt(varsum)
+    
+    summary=summ
+    se_summary=np.sqrt(varsum)
+    
+    return summary, se_summary
+
+
+def zsc2pval(zsc, option="two-sided"):
+    """
+    Convert z-score to one-sided p-value. Accurate up to `zsc=36` and `pval=4.2e-284`.
+    """
+    #     return 1 - sp.stats.norm.cdf(zsc)
+    if option=="one-sided":
+        return sp.stats.norm.cdf(-zsc)  # This is more accurate
+    if option=="two-sided":
+        return sp.stats.norm.cdf(-np.absolute(zsc)) * 2
 
 
 ################################################################################
