@@ -267,8 +267,6 @@ def summarize(
         },
     )
     
-#     return {"tau": df_sum_tau, "rho": df_sum_rho}
-
     # Iterate over CHR_list to collect info
     dic_AN_n_snp = {x: 0 for x in res_AN_list}
     dic_AN_n_snp_ref = {x: 0 for x in res_AN_list}
@@ -282,7 +280,6 @@ def summarize(
     dic_pAN_v = {x: np.zeros(len(res_pAN_list), dtype=np.float32) for x in res_pAN_list}
     dic_pAN_var_total = {x: 0 for x in res_pAN_list}
     
-#     CHR_list = [21, 22]
     for CHR in CHR_list:
         # df_annot_chr
         df_annot_chr = dic_data[CHR]["pvar"][["SNP"]].copy()
@@ -299,7 +296,7 @@ def summarize(
                     df_annot_chr[AN] = df_annot_chr[AN].astype(np.float32)
         # Update info
         for AN in res_AN_list:
-            dic_AN_n_snp[AN] = dic_AN_n_snp[AN] + (df_annot_chr[AN] == 1).sum()
+            dic_AN_n_snp[AN] = dic_AN_n_snp[AN] + df_annot_chr[AN].sum()
             if len(df_annot_chr[AN].unique()) > 2:
                 dic_AN_type[AN] = "non-binary"
             dic_AN_v[AN] = (
@@ -328,19 +325,20 @@ def summarize(
         # Update info
         v_persnp_h2 = np.zeros(dic_data[CHR]["pvar"].shape[0], dtype=np.float32)
         for AN in res_AN_list:
-            v_persnp_h2 = v_persnp_h2 + df_sum_tau.loc[AN, "tau"] * df_annot_chr[AN]
-        v_persnp_h2_sqrt = np.sqrt(v_persnp_h2).astype(np.float32)
+            v_persnp_h2 = v_persnp_h2 + df_sum_tau.loc[AN, "tau"] * df_annot_chr[AN].values
+        v_persnp_h2_sqrt = np.sqrt(v_persnp_h2.clip(min=0)).astype(np.float32)
 
         for pAN in res_pAN_list:
             dic_pAN_n_pair[pAN] = dic_pAN_n_pair[pAN] + dic_mat_G_chr[pAN].sum()
             temp_list = [
-#                 (dic_mat_G_chr[pAN] * dic_mat_G_chr[x]).sum() for x in res_pAN_list
                 dic_mat_G_chr[pAN].multiply(dic_mat_G_chr[x]).sum() for x in res_pAN_list
             ]
             dic_pAN_v[pAN] = dic_pAN_v[pAN] + np.array(temp_list, dtype=np.float32)
             dic_pAN_var_total[pAN] = dic_pAN_var_total[pAN] + dic_mat_G_chr[pAN].dot(
                 v_persnp_h2_sqrt
             ).T.dot(v_persnp_h2_sqrt)
+            
+#     return {"dic_AN_v" : dic_AN_v, "v_persnp_h2" : v_persnp_h2}
 
     # Summary : n_snp,n_pair
     df_sum_tau["n_snp"] = [dic_AN_n_snp[x] for x in res_AN_list]
@@ -525,9 +523,15 @@ def regress(
     #    - Z_i^2 : 1 / l_i, where l_i = \sum_j r_ij^2
     #    - Z_i Z_j : 1 / l_ij, where l_ij = \sum_k r_ik r_jk
     temp_list = [
-        x for x in df_reg if x.startswith("LD:AN:all") | x.startswith("LD:AN:ALL")
+#         x for x in df_reg if x.startswith("LD:AN:all") | x.startswith("LD:AN:ALL")
+        x for x in df_reg if x.startswith("LD:AN:all_") | x.startswith("LD:AN:mbin")
     ]
-    v_ld = df_reg[temp_list].sum(axis=1).values.clip(min=0.1)
+    v_ld = df_reg[temp_list].sum(axis=1).values.clip(min=0.1)    
+    if verbose:
+        print(
+            verbose_prefix
+            + "    Use following annots for LD score: %s" % ",".join(temp_list)
+        )
     # 2. Zsq variance weights : (clipped at max=10)
     #    - Z_i^2 : 1 / [ 2 (N l_i / M + 1) ^ 2 ]
     #    - Z_i Z_j : 1 / [ (N l_i / M + 1) (N l_j / M + 1) + (N l_ij / M + 1) ^ 2 ]

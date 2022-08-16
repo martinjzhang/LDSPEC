@@ -11,7 +11,6 @@ def compute_ld(
     dic_data,
     pos_tar,
     pos_ref,
-    memory=1024,
     verbose=False,
 ):
     """
@@ -28,8 +27,6 @@ def compute_ld(
 
     pos_tar,pos_ref : list of int
         Genomic range of SNPs of format [CHR, ind_start, ind_end].
-    memory : int, default=1024
-        Memory to use (in MB).
 
     Returns
     -------
@@ -73,7 +70,6 @@ def compute_ld(
             "    n_snp_tar=%d (CHR%d), n_snp_ref=%d (CHR%d), n_sample=%d"
             % (n_snp_tar, CHR_tar, n_snp_ref, CHR_ref, n_sample)
         )
-        print("    memory=%dMB" % (memory))
         print("    block_size_tar=%d, n_block_tar=%d" % (block_size_tar, n_block_tar))
         print("    block_size_ref=%d, n_block_ref=%d" % (block_size_ref, n_block_ref))
         print(
@@ -152,7 +148,6 @@ def compute_score(
     snp_range=None,
     flag_cross_term=False,
     win_size=int(1e7),
-    memory=1024,
     verbose=False,
 ):
 
@@ -188,8 +183,6 @@ def compute_score(
         and covered by at least one pannot.
     win_size : int, defualt=1e7
         Window size for computing LD and DLD scores.
-    memory : int, default=1024
-        Memory to use (in MB).
 
     Returns
     -------
@@ -235,7 +228,7 @@ def compute_score(
             print("    Range: chr=%d, start=%d, end=%d " % snp_range)
         print("    Annots : %s" % ", ".join(AN_list))
         print("    Pannots : %s" % ", ".join(pAN_list))
-        print("    win_size=%0.1fMB, memory=%dMB" % (win_size / 1e6, memory))
+        print("    win_size=%0.1fMB" % (win_size / 1e6))
 
     # Compute score
     block_size = 10000

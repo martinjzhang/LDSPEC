@@ -35,6 +35,7 @@ regress : infer parameters \tau and \rho.
     
 TODO
 ----
+- Double check file consistency 
 
 """
 
@@ -54,7 +55,6 @@ def main(args):
     ANNOT_FILE = args.annot_file
     PREFIX_OUT = args.prefix_out
     SNP_RANGE = args.snp_range
-    MEMORY = args.memory
     RANDOM_SEED = args.random_seed
     FLAG_FULL_LD = args.flag_full_ld
     FLAG_CROSS_TERM = args.flag_cross_term
@@ -89,7 +89,6 @@ def main(args):
     header += "--annot_file %s\\\n" % ANNOT_FILE
     header += "--prefix_out %s\\\n" % PREFIX_OUT
     header += "--snp_range %s\\\n" % SNP_RANGE
-    header += "--memory %d\\\n" % MEMORY
     header += "--random_seed %d\\\n" % RANDOM_SEED
     header += "--flag_full_ld %s\\\n" % FLAG_FULL_LD
     header += "--flag_cross_term %s\n" % FLAG_CROSS_TERM
@@ -151,13 +150,13 @@ def main(args):
     # Load --score_file
     if JOB in ["regress"]:
         print("# Loading --score_file")
-        chr_list_score = set(range(1, 23))
+        chr_list_score = set(dic_data)
         for score_file in SCORE_FILE.split(","):
             print("    %s" % score_file)
             chr_list_score = chr_list_score & set(
                 [
                     x
-                    for x in range(1, 23)
+                    for x in dic_data
                     if os.path.exists(score_file.replace("@", "%d" % x))
                 ]
             )
@@ -211,11 +210,15 @@ def main(args):
         dic_pannot_path = {}
 
         for annot_file in ANNOT_FILE.split(","):
+            if annot_file.endswith((".annot.gz", ".pannot_mat.npz")) is False:
+                print("    Skip: %s" % annot_file)
+                continue
+                
             annot_name = gdreg.util.get_annot_name_from_file(annot_file)
             if annot_file.endswith(".annot.gz"):
                 # Loading .annot.gz
                 dic_annot_path[annot_name] = {}
-                for CHR in range(1, 23):
+                for CHR in dic_data:
                     fpath = annot_file.replace("@", "%d" % CHR)
                     if os.path.exists(fpath):
                         dic_annot_path[annot_name][CHR] = fpath
@@ -244,7 +247,7 @@ def main(args):
             if annot_file.endswith(".pannot_mat.npz"):
                 # Loading .pannot_mat.npz
                 dic_pannot_path[annot_name] = {}
-                for CHR in range(1, 23):
+                for CHR in dic_data:
                     fpath = annot_file.replace("@", "%d" % CHR)
                     if os.path.exists(fpath):
                         dic_pannot_path[annot_name][CHR] = fpath
@@ -281,20 +284,21 @@ def main(args):
         )
         
         # Check if having all annots/pannots
-        AN_list_score = [x.replace("LD:","") for x in df_score if x.startswith("LD:")]
-        pAN_list_score = [x.replace("DLD:","") for x in df_score if x.startswith("DLD:")]
-        AN_list, CHR = [], list(CHR_set)[0]
-        for annot_name in dic_annot_path:
-            temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR], nrows=5)
-            AN_list.extend([x for x in temp_df if x.startswith("AN:")])
-        pAN_list = list(dic_pannot_path)
-                
-        drop_list1 = ["LD:%s" % x for x in (set(AN_list_score) - set(AN_list))]
-        drop_list2 = ["DLD:%s" % x for x in (set(pAN_list_score) - set(pAN_list))]
-        drop_list = drop_list1 + drop_list2
-        if len(drop_list) > 0:
-            print("    Remove scores without ANNOT_FILE: %s" % ",".join(drop_list))
-        df_score.drop(columns=drop_list, inplace=True)
+        if SCORE_FILE is not None:
+            AN_list_score = [x.replace("LD:","") for x in df_score if x.startswith("LD:")]
+            pAN_list_score = [x.replace("DLD:","") for x in df_score if x.startswith("DLD:")]
+            AN_list, CHR = [], list(CHR_set)[0]
+            for annot_name in dic_annot_path:
+                temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR], nrows=5)
+                AN_list.extend([x for x in temp_df if x.startswith("AN:")])
+            pAN_list = list(dic_pannot_path)
+
+            drop_list1 = ["LD:%s" % x for x in (set(AN_list_score) - set(AN_list))]
+            drop_list2 = ["DLD:%s" % x for x in (set(pAN_list_score) - set(pAN_list))]
+            drop_list = drop_list1 + drop_list2
+            if len(drop_list) > 0:
+                print("    Remove scores without ANNOT_FILE: %s" % ",".join(drop_list))
+            df_score.drop(columns=drop_list, inplace=True)
 
     ###########################################################################################
     ######                                  Computation                                  ######
@@ -320,7 +324,7 @@ def main(args):
             pos_tar = [CHR, 0, dic_data[CHR]["pvar"].shape[0]]
             pos_ref = [CHR_REF, 0, dic_data[CHR_REF]["pvar"].shape[0]]
             mat_ld = gdreg.score.compute_ld(
-                dic_data, pos_tar, pos_ref, verbose=True, memory=MEMORY
+                dic_data, pos_tar, pos_ref, verbose=True,
             )
             np.save(PREFIX_OUT + ".c%s_r%s_fullld" % (CHR, CHR_REF), mat_ld)
         else:
@@ -352,7 +356,6 @@ def main(args):
                     pos_tar,
                     pos_ref,
                     verbose=True,
-                    memory=MEMORY,
                 )
                 temp_mat = np.zeros([n_snp, ind_e - ind_s], dtype=np.float32)
                 temp_mat[ind_s_ref:ind_e_ref, :] = mat_ld
