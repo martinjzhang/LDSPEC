@@ -7,8 +7,6 @@ import re
 import time
 import argparse
 import pickle
-
-# in-house tools
 import gdreg
 
 
@@ -21,23 +19,28 @@ get_snp_block : generate SNP blocks based on sample size and memory
     - Output : list of snp ranges (in the format of "snp_range")
 
 compute_ld : compute LD matrix.
-    - Input : --job | --pgen_file | --prefix_out | --snp_range | [--memory] ｜ [--random_seed]
-        | [--flag_full_ld]
+    - Input : --job | --pgen_file | --prefix_out | --snp_range | [--random_seed] | [--flag_full_ld]
     - Output : LD matrix between a set of SNPs and all other SNPs on the same chromosome.
     
+summarize_pannot : summarize pannot based on LD information.
+    - Input : --job | --pgen_file | --prefix_out | --annot_file | --ld_file | [--random_seed]
+    - Output : Summary of pannots with columns ['n_pair', 'avg_ld'].
+    
 compute_score : compute LD and DLD scores.
-    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--memory]
-    ｜ [--random_seed] | [--flag_cross_term]
+    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--random_seed] 
+    | [--flag_cross_term]
     - Output : LD and DLD scores.
     
 regress : infer parameters \tau and \rho.
-    - Input : --job | --pgen_file | --score_file | --sumstats_file | --annot_file | --prefix_out 
-        | [--memory]
+    - Input : --job | --pgen_file | --score_file | --sumstats_file | --annot_file | --prefix_out
+    | [--flag_cross_term]
     - Output : GDREG result.
     
 TODO
 ----
-
+- Double check file consistency 
+- Update reading of LD file
+- Add job --summarize_pannot
 """
 
 
@@ -56,7 +59,6 @@ def main(args):
     ANNOT_FILE = args.annot_file
     PREFIX_OUT = args.prefix_out
     SNP_RANGE = args.snp_range
-    MEMORY = args.memory
     RANDOM_SEED = args.random_seed
     FLAG_FULL_LD = args.flag_full_ld
     FLAG_CROSS_TERM = args.flag_cross_term
@@ -66,7 +68,7 @@ def main(args):
     err_msg = "# run_gdreg: --job=%s not supported" % JOB
     assert JOB in LEGAL_JOB_LIST, err_msg
 
-    if JOB in ["get_snp_block", "compute_ld", "compute_score"]:
+    if JOB in ["get_snp_block", "compute_ld", "compute_score", "regress"]:
         assert PGEN_FILE is not None, "--pgen_file required for --job=%s" % JOB
     if JOB in ["compute_score"]:
         assert LD_FILE is not None, "--ld_file required for --job=%s" % JOB
@@ -91,7 +93,6 @@ def main(args):
     header += "--annot_file %s\\\n" % ANNOT_FILE
     header += "--prefix_out %s\\\n" % PREFIX_OUT
     header += "--snp_range %s\\\n" % SNP_RANGE
-    header += "--memory %d\\\n" % MEMORY
     header += "--random_seed %d\\\n" % RANDOM_SEED
     header += "--flag_full_ld %s\\\n" % FLAG_FULL_LD
     header += "--flag_cross_term %s\n" % FLAG_CROSS_TERM
@@ -101,7 +102,7 @@ def main(args):
     ######                                   Data Loading                                ######
     ###########################################################################################
     # Load --pgen_file
-    if JOB in ["get_snp_block", "compute_ld", "compute_score"]:
+    if JOB in ["get_snp_block", "compute_ld", "compute_score", "regress"]:
         print("# Loading --pgen_file")
         dic_data = {}
         if "@" not in PGEN_FILE:
@@ -132,6 +133,7 @@ def main(args):
         print("# Loading --ld_file")
         assert os.path.exists(LD_FILE), "--ld_file does not exist"
         mat_ld, dic_range = gdreg.util.read_ld(LD_FILE)
+        mat_ld.data[np.isnan(mat_ld.data)] = 0
         if dic_range["chr_ref"] is None:
             dic_range["chr_ref"] = dic_range["chr"]
         err_msg = "n_snp=%d, mismatch with --pgen_file" % mat_ld.shape[0]
@@ -152,16 +154,40 @@ def main(args):
     # Load --score_file
     if JOB in ["regress"]:
         print("# Loading --score_file")
-        flist = sorted(gdreg.util.from_filepattern(SCORE_FILE))
-        print("    find %d score files" % len(flist))
-        df_score = None
-        for fpath in flist:
-            temp_df = pd.read_csv(fpath, sep="\t", index_col=None)
+        chr_list_score = set(dic_data)
+        for score_file in SCORE_FILE.split(","):
+            print("    %s" % score_file)
+            chr_list_score = chr_list_score & set(
+                [
+                    x
+                    for x in dic_data
+                    if os.path.exists(score_file.replace("@", "%d" % x))
+                ]
+            )
+        print(
+            "    Detected all score files for %d CHRs: %s"
+            % (len(chr_list_score), ",".join(["%d" % x for x in chr_list_score]))
+        )
 
+        df_score = None
+        for score_file in SCORE_FILE.split(","):
+            df_list = []
+            for CHR in chr_list_score:
+                fpath = score_file.replace("@", "%d" % CHR)
+                if os.path.exists(fpath):
+                    temp_df = pd.read_csv(fpath, sep="\t", index_col=None)
+                    col_list = [x for x in temp_df if x.startswith(("E", "LD", "DLD"))]
+                    temp_df[col_list] = temp_df[col_list].astype(np.float32)
+                    df_list.append(temp_df.copy())
+
+            temp_df = pd.concat(df_list, axis=0)
+            temp_df.index = temp_df["SNP"]
             if df_score is None:
                 df_score = temp_df.copy()
             else:
-                df_score = pd.concat([df_score, temp_df], axis=0)
+                col_list = [x for x in temp_df if x not in df_score]
+                df_score = df_score.join(temp_df[col_list])
+            del temp_df
 
         df_score.sort_values(["CHR", "BP"], inplace=True)
         df_score.index = df_score["SNP"]
@@ -181,45 +207,102 @@ def main(args):
         print("    .sumstats.gz loaded, %d SNPs" % df_sumstats.shape[0])
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
-    # Load --annot_file
+    # Load --annot_file (lazy loading)
     if JOB in ["compute_score", "regress"]:
         print("# Loading --annot_file")
-        df_annot = None
-        pannot_list = []
-        pannot_hr_list = []
-        for annot_file in ANNOT_FILE.split(","):
-            err_msg = "--annot_file missing : '%s'" % annot_file
-            assert os.path.exists(annot_file), err_msg
-            temp_df = gdreg.util.read_annot(annot_file)
+        dic_annot_path = {}
+        dic_pannot_path = {}
 
+        for annot_file in ANNOT_FILE.split(","):
+            if annot_file.endswith((".annot.gz", ".pannot_mat.npz")) is False:
+                print("    Skip: %s" % annot_file)
+                continue
+                
+            annot_name = gdreg.util.get_annot_name_from_file(annot_file)
             if annot_file.endswith(".annot.gz"):
-                temp_df.index = temp_df["SNP"]
-                if df_annot is None:
-                    df_annot = temp_df.copy()
-                else:
-                    col_list = [x for x in temp_df if x.startswith("AN:")]
-                    df_annot = df_annot.join(temp_df[col_list])
-            if annot_file.endswith(".pannot.gz"):
-                pannot_list.append(temp_df.copy())
-            if annot_file.endswith(".pannot_hr.gz"):
-                pannot_hr_list.append(temp_df.copy())
-        AN_list = [x for x in df_annot if x.startswith("AN:")]
+                # Loading .annot.gz
+                dic_annot_path[annot_name] = {}
+                for CHR in dic_data:
+                    fpath = annot_file.replace("@", "%d" % CHR)
+                    if os.path.exists(fpath):
+                        dic_annot_path[annot_name][CHR] = fpath
+                # Checking .annot.gz
+                CHR0 = list(dic_annot_path[annot_name])[0]
+                col_list = list(
+                    gdreg.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
+                )
+                for CHR in dic_annot_path[annot_name]:
+                    temp_df = gdreg.util.read_annot(
+                        dic_annot_path[annot_name][CHR], nrows=5
+                    )
+                    err_msg = "%s : columns mismatch between CHR%d and CHR%d" % (
+                        annot_name,
+                        CHR0,
+                        CHR,
+                    )
+                    assert list(temp_df) == col_list, err_msg
+                print(
+                    "    %s (%d CHRs) : columms match for all CHRs. Containing:"
+                    % (annot_name, len(dic_annot_path[annot_name]))
+                )
+                temp_str = ",".join([x for x in col_list if x.startswith("AN:")])
+                print("        %s" % temp_str)
+
+            if annot_file.endswith(".pannot_mat.npz"):
+                # Loading .pannot_mat.npz
+                dic_pannot_path[annot_name] = {}
+                for CHR in dic_data:
+                    fpath = annot_file.replace("@", "%d" % CHR)
+                    if os.path.exists(fpath):
+                        dic_pannot_path[annot_name][CHR] = fpath
+                # Checking .pannot_mat.npz
+                CHR = np.random.choice(list(dic_pannot_path[annot_name]), size=1)[0]
+                mat_G = gdreg.util.read_pannot_mat(dic_pannot_path[annot_name][CHR])
+                err_msg = "(%s, CHR%d) : n_snp=%d, mismatch with --pgen_file" % (
+                    annot_name,
+                    CHR,
+                    mat_G.shape[0],
+                )
+                assert mat_G.shape[0] == dic_data[CHR]["pvar"].shape[0], err_msg
+                print(
+                    "    %s (%d CHRs) : CHR%d dimension matches with .pvar"
+                    % (annot_name, len(dic_pannot_path[annot_name]), CHR)
+                )
+
+        # Check CHR_set
+        if len(dic_annot_path) > 0:
+            annot_name = list(dic_annot_path)[0]
+            CHR_set = set(dic_annot_path[annot_name])
+        else:
+            annot_name = list(dic_pannot_path)[0]
+            CHR_set = set(dic_pannot_path[annot_name])
+        for annot_name in dic_annot_path:
+            err_msg = "Set of CHRs does not match for %s" % annot_name
+            assert set(dic_annot_path[annot_name]) == CHR_set, err_msg
+        for annot_name in dic_pannot_path:
+            err_msg = "Set of CHRs does not match for %s" % annot_name
+            assert set(dic_pannot_path[annot_name]) == CHR_set, err_msg
         print(
-            "    .annot.gz (%d SNPs and %d annots): %s"
-            % (df_annot.shape[0], len(AN_list), ",".join(AN_list))
+            "    Detected %d CHRs for all files : %s"
+            % (len(CHR_set), ",".join(["%d" % x for x in CHR_set]))
         )
-        temp_list = ["%s (%d SNPs)" % (x.columns[-1], x.shape[0]) for x in pannot_list]
-        print(
-            "    .pannot.gz (%d pannots): %s" % (len(pannot_list), ",".join(temp_list)),
-        )
-        temp_list = [
-            "%s (%d pairs)" % (x.columns[-1], x.shape[0]) for x in pannot_hr_list
-        ]
-        print(
-            "    .pannot_hr.gz (%d pannots): %s"
-            % (len(pannot_hr_list), ",".join(temp_list)),
-        )
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        
+        # Check if having all annots/pannots
+        if SCORE_FILE is not None:
+            AN_list_score = [x.replace("LD:","") for x in df_score if x.startswith("LD:")]
+            pAN_list_score = [x.replace("DLD:","") for x in df_score if x.startswith("DLD:")]
+            AN_list, CHR = [], list(CHR_set)[0]
+            for annot_name in dic_annot_path:
+                temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR], nrows=5)
+                AN_list.extend([x for x in temp_df if x.startswith("AN:")])
+            pAN_list = list(dic_pannot_path)
+
+            drop_list1 = ["LD:%s" % x for x in (set(AN_list_score) - set(AN_list))]
+            drop_list2 = ["DLD:%s" % x for x in (set(pAN_list_score) - set(pAN_list))]
+            drop_list = drop_list1 + drop_list2
+            if len(drop_list) > 0:
+                print("    Remove scores without ANNOT_FILE: %s" % ",".join(drop_list))
+            df_score.drop(columns=drop_list, inplace=True)
 
     ###########################################################################################
     ######                                  Computation                                  ######
@@ -245,7 +328,7 @@ def main(args):
             pos_tar = [CHR, 0, dic_data[CHR]["pvar"].shape[0]]
             pos_ref = [CHR_REF, 0, dic_data[CHR_REF]["pvar"].shape[0]]
             mat_ld = gdreg.score.compute_ld(
-                dic_data, pos_tar, pos_ref, verbose=True, memory=MEMORY
+                dic_data, pos_tar, pos_ref, verbose=True,
             )
             np.save(PREFIX_OUT + ".c%s_r%s_fullld" % (CHR, CHR_REF), mat_ld)
         else:
@@ -277,7 +360,6 @@ def main(args):
                     pos_tar,
                     pos_ref,
                     verbose=True,
-                    memory=MEMORY,
                 )
                 temp_mat = np.zeros([n_snp, ind_e - ind_s], dtype=np.float32)
                 temp_mat[ind_s_ref:ind_e_ref, :] = mat_ld
@@ -313,14 +395,16 @@ def main(args):
         df_score = gdreg.score.compute_score(
             dic_data,
             dic_ld,
-            df_annot,
-            pannot_list,
-            pannot_hr_list,
+            dic_annot_path=dic_annot_path,
+            dic_pannot_path=dic_pannot_path,
             flag_cross_term=FLAG_CROSS_TERM,
             verbose=True,
             win_size=1e7,
             snp_range=snp_range,
         )
+
+        col_list = [x for x in df_score if x.startswith(("E", "LD", "DLD"))]
+        df_score[col_list] = df_score[col_list].astype(np.float32)
 
         df_score.to_csv(
             PREFIX_OUT + ".c%d_s%d_e%d_score.tsv.gz" % (CHR, START, END),
@@ -328,19 +412,19 @@ def main(args):
             index=False,
             compression="gzip",
         )
+        print("    " + gdreg.util.get_sys_info(sys_start_time))
 
     if JOB == "regress":
         print("# Running --job regress")
 
         dic_res = gdreg.regress.estimate(
+            dic_data,
             df_score,
             df_sumstats,
-            df_annot,
-            pannot_list=pannot_list,
-            pannot_hr_list=pannot_hr_list,
+            dic_annot_path=dic_annot_path,
+            dic_pannot_path=dic_pannot_path,
             flag_cross_term=FLAG_CROSS_TERM,
             n_jn_block=100,
-            sym_non_pAN="non-pAN",
             verbose=True,
         )
 
@@ -348,13 +432,10 @@ def main(args):
         dbfile = open(PREFIX_OUT + ".pickle", "wb")
         pickle.dump(dic_res, dbfile)
         dbfile.close()
-        dic_res[0]["summary"]["tau"].to_csv(
-            PREFIX_OUT + ".tau.tsv", sep="\t", index=False
-        )
-        dic_res[1]["summary"]["tau"].to_csv(
+        dic_res["summary"]["tau"].to_csv(
             PREFIX_OUT + ".joint_tau.tsv", sep="\t", index=False
         )
-        dic_res[1]["summary"]["rho"].to_csv(
+        dic_res["summary"]["rho"].to_csv(
             PREFIX_OUT + ".joint_rho.tsv", sep="\t", index=False
         )
 
