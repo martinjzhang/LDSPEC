@@ -140,6 +140,36 @@ def compute_ld(
     return mat_ld
 
 
+def summarize_pannot(
+    dic_pannot_path,
+    dic_ld_path,
+    verbose=False,
+):
+    """
+    Summarize pannot based on LD information.
+
+    Parameters
+    ----------  
+    dic_pannot_path : dic of dic of strs
+        File path for SNP-pair annotation. dic_pannot_path[annot_name][CHR] contains the
+        `.pannot_mat.npz` file path for annotation pAN and and CHR `CHR`. Dimension of the
+        sparse matrix should match `dic_data[CHR][pvar]`.
+    dic_ld_path : dic of dic of strs
+        File path for LD matrices of shape (n_snp_ref, n_snp_tar), in csc format. SNP-pair annotation. dic_pannot_path[annot_name][CHR] contains the
+        `.pannot_mat.npz` file path for annotation pAN and and CHR `CHR`. Dimension of the
+        sparse matrix should match `dic_data[CHR][pvar]`.
+
+    pos_tar,pos_ref : list of int
+        Genomic range of SNPs of format [CHR, ind_start, ind_end].
+
+    Returns
+    -------
+    mat_ld : np.array(dtype=np.float32)
+        LD matrix of shape (n_snp_ref, n_snp_tar).
+    """
+    pass  
+
+
 def compute_score(
     dic_data,
     dic_ld,

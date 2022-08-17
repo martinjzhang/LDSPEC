@@ -63,6 +63,7 @@ def estimate(
     TODO
     ----
     - Only do the joint analyses
+    - Add jn results for other quantities
     """
 
     start_time = time.time()

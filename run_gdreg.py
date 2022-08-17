@@ -19,24 +19,28 @@ get_snp_block : generate SNP blocks based on sample size and memory
     - Output : list of snp ranges (in the format of "snp_range")
 
 compute_ld : compute LD matrix.
-    - Input : --job | --pgen_file | --prefix_out | --snp_range | [--memory] ｜ [--random_seed]
-        | [--flag_full_ld]
+    - Input : --job | --pgen_file | --prefix_out | --snp_range | [--random_seed] | [--flag_full_ld]
     - Output : LD matrix between a set of SNPs and all other SNPs on the same chromosome.
     
+summarize_pannot : summarize pannot based on LD information.
+    - Input : --job | --pgen_file | --prefix_out | --annot_file | --ld_file | [--random_seed]
+    - Output : Summary of pannots with columns ['n_pair', 'avg_ld'].
+    
 compute_score : compute LD and DLD scores.
-    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--memory]
-    ｜ [--random_seed] | [--flag_cross_term]
+    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--random_seed] 
+    | [--flag_cross_term]
     - Output : LD and DLD scores.
     
 regress : infer parameters \tau and \rho.
-    - Input : --job | --pgen_file | --score_file | --sumstats_file | --annot_file | --prefix_out 
-        | [--memory]
+    - Input : --job | --pgen_file | --score_file | --sumstats_file | --annot_file | --prefix_out
+    | [--flag_cross_term]
     - Output : GDREG result.
     
 TODO
 ----
 - Double check file consistency 
-
+- Update reading of LD file
+- Add job --summarize_pannot
 """
 
 
