@@ -536,7 +536,6 @@ def regress(
     # 2. Zsq variance weights : (clipped at max=10)
     #    - Z_i^2 : 1 / [ 2 (N l_i / M + 1) ^ 2 ]
     #    - Z_i Z_j : 1 / [ (N l_i / M + 1) (N l_j / M + 1) + (N l_ij / M + 1) ^ 2 ]
-    #
     n_snp = (df_reg["SNP1"] == df_reg["SNP2"]).sum()
     dic_ld = {(x, y): z for x, y, z in zip(df_reg["SNP1"], df_reg["SNP2"], v_ld)}
     v_zsq_var = [
@@ -550,20 +549,6 @@ def regress(
     v_w = np.sqrt(1 / v_ld / v_zsq_var).astype(np.float32)
     v_w = v_w / v_w.mean()
 
-    #     # Regression weights
-    #     # 1. LD : 1 / l_j
-    #     # 2. Zsq variance : 1 / (1 + N h_g^2 l_j / M) ^ 2
-    #     LD_all_list = [
-    #         x for x in df_reg if x.startswith("LD:AN:all") | x.startswith("LD:AN:ALL")
-    #     ]
-    #     v_ld = df_reg[LD_all_list].sum(axis=1).values.clip(min=1)
-    #     v_zsq_var = (
-    #         n_sample_zsq * 0.5 * df_reg[LD_all_list].sum(axis=1).values / df_reg.shape[0]
-    #         + 0.5 * df_reg["E"].values
-    #     ).clip(min=0.1)
-    #     v_w = np.sqrt(1 / v_ld / v_zsq_var)
-    #     v_w = v_w / v_w.mean()
-
     # Regression
     mat_X = df_reg[reg_list].values.astype(np.float32)
     mat_X[:, :-1] *= n_sample_zsq
@@ -572,12 +557,22 @@ def regress(
     mat_X = (mat_X.T * v_w).T
     v_y = v_y * v_w
 
-    coef, coef_mean, coef_cov = reg_bjn(v_y, mat_X, dic_block)
+#     coef, coef_mean, coef_cov = reg_bjn(v_y, mat_X, dic_block)
+#     dic_res_reg = {
+#         "term": reg_list,
+#         "coef": coef,
+#         "coef_jn": coef_mean,
+#         "coef_jn_cov": coef_cov,
+#     }
+    
+    dic_jn = reg_bjn(v_y, mat_X, dic_block)
     dic_res_reg = {
         "term": reg_list,
-        "coef": coef,
-        "coef_jn": coef_mean,
-        "coef_jn_cov": coef_cov,
+        "coef": dic_jn['coef'],
+        "coef_jn": dic_jn['coef_mean'],
+        "coef_jn_cov": dic_jn['coef_cov'],
+        "coef_block": dic_jn['coef_block'],
+        "v_h": dic_jn['v_h'],
     }
 
     if verbose:
@@ -653,15 +648,61 @@ def reg_bjn(v_y, mat_X, dic_block, verbose=False):
 
     # Jacknife : mean & covariance
     v_h = n_sample / v_block_size
-    coef_mean = (-coef_block + coef).sum(axis=0) + (coef_block.T / v_h).sum(axis=1)
+    coef_mean, coef_cov = bjn(coef, coef_block, v_h)
+    
+    dic_res = {
+        'coef' : coef,
+        'coef_mean' : coef_mean,
+        'coef_cov' : coef_cov,
+        'coef_block' : coef_block,
+        'v_h' : v_h,
+    }
+    
+    return dic_res
+    
+#     coef_mean = (-coef_block + coef).sum(axis=0) + (coef_block.T / v_h).sum(axis=1)
 
-    mat_tau = np.zeros([n_block, n_regressor], dtype=np.float32)
+#     mat_tau = np.zeros([n_block, n_regressor], dtype=np.float32)
+#     for i in np.arange(n_block):
+#         mat_tau[i, :] = v_h[i] * coef - (v_h[i] - 1) * coef_block[i, :]
+
+#     coef_cov = np.zeros([n_regressor, n_regressor], dtype=np.float32)
+#     for i in np.arange(n_block):
+#         temp_v = mat_tau[i, :] - coef_mean
+#         coef_cov += np.outer(temp_v, temp_v) / n_block / (v_h[i] - 1)
+
+#     return coef, coef_mean, coef_cov
+
+
+def bjn(v_esti, mat_esti_jn, v_h):
+    """ Block jackknife. 
+        
+    Parameters
+    ----------
+    v_esti : np.ndarray(dtype=np.float32)
+        Estimates using all samples of shape (n_param, )
+    mat_esti_jn : np.ndarray(dtype=np.float32)
+        JN estimates of shape (n_block, n_param)
+    v_h : np.ndarray(dtype=np.float32)
+        n_sample / v_sample_block of shape (n_block, )
+
+    Returns
+    -------
+    v_mean_jn : np.ndarray(dtype=np.float32)
+        Jackknife bias-corrected estimates of shape (n_regressor,).
+    mat_cov_jn : np.ndarray(dtype=np.float32)
+        Jackknife covariance of shape (n_regressor, n_regressor).
+    """
+    n_block,n_param = mat_esti_jn.shape
+    v_mean_jn = ( - mat_esti_jn + v_esti).sum(axis=0) + ( mat_esti_jn.T / v_h ).sum(axis=1)
+
+    mat_tau = np.zeros([n_block, n_param], dtype=np.float32)
     for i in np.arange(n_block):
-        mat_tau[i, :] = v_h[i] * coef - (v_h[i] - 1) * coef_block[i, :]
+        mat_tau[i, :] = v_h[i] * v_esti - (v_h[i] - 1) * mat_esti_jn[i, :]
 
-    coef_cov = np.zeros([n_regressor, n_regressor], dtype=np.float32)
+    mat_cov_jn = np.zeros([n_param, n_param], dtype=np.float32)
     for i in np.arange(n_block):
-        temp_v = mat_tau[i, :] - coef_mean
-        coef_cov += np.outer(temp_v, temp_v) / n_block / (v_h[i] - 1)
-
-    return coef, coef_mean, coef_cov
+        temp_v = mat_tau[i, :] - v_mean_jn
+        mat_cov_jn += np.outer(temp_v, temp_v) / n_block / (v_h[i] - 1)
+    
+    return v_mean_jn, mat_cov_jn
