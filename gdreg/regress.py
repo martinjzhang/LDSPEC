@@ -236,22 +236,30 @@ def summarize(
     assert len(set(res_AN_list) - set(AN_list)) == 0, err_msg
     err_msg = "dic_pannot_mat does not contain all pannots in dic_res"
     assert len(set(res_pAN_list) - set(pAN_list)) == 0, err_msg
-
+    
     # Summary
-    dic_coef = {x: y for x, y in zip(dic_res["term"], dic_res["coef_jn"])}
+    dic_coef = {x: y for x, y in zip(dic_res["term"], dic_res["coef"])}
+    dic_coef_jn = {x: y for x, y in zip(dic_res["term"], dic_res["coef_jn"])}
     v_se = np.sqrt(np.diag(dic_res["coef_jn_cov"]))
-    dic_coef_se = {x: y for x, y in zip(dic_res["term"], v_se)}
+    dic_coef_jn_se = {x: y for x, y in zip(dic_res["term"], v_se)}
+    df_coef_block = pd.DataFrame(
+        columns=dic_res["term"], data=dic_res["coef_block"]
+    )
     df_sum_tau = pd.DataFrame(
         index=res_AN_list,
         data={
             "annot": res_AN_list,
             "n_snp": 0,
-            "tau": [dic_coef["LD:%s" % x] for x in res_AN_list],
-            "tau_se": [dic_coef_se["LD:%s" % x] for x in res_AN_list],
+            "tau": [dic_coef_jn["LD:%s" % x] for x in res_AN_list],
+            "tau_se": [dic_coef_jn_se["LD:%s" % x] for x in res_AN_list],
             "h2": np.nan,
+            "h2_jn": np.nan,
             "h2_se": np.nan,
+            "h2_jnse": np.nan,
             "enrich": np.nan,
+            "enrich_jn": np.nan,
             "enrich_se": np.nan,
+            "enrich_jnse": np.nan,
         },
     )
     df_sum_rho = pd.DataFrame(
@@ -259,12 +267,16 @@ def summarize(
         data={
             "pannot": res_pAN_list,
             "n_pair": 0,
-            "rho": [dic_coef["DLD:%s" % x] for x in res_pAN_list],
-            "rho_se": [dic_coef_se["DLD:%s" % x] for x in res_pAN_list],
+            "rho": [dic_coef_jn["DLD:%s" % x] for x in res_pAN_list],
+            "rho_se": [dic_coef_jn_se["DLD:%s" % x] for x in res_pAN_list],
             "cov": np.nan,  # Avg. cov
+            "cov_jn": np.nan,  # Avg. cov
             "cov_se": np.nan,
+            "cov_jnse": np.nan,
             "r2": np.nan,  # Avg. cor
+            "r2_jn": np.nan,  # Avg. cor
             "r2_se": np.nan,
+            "r2_jnse": np.nan,
         },
     )
     
@@ -280,6 +292,8 @@ def summarize(
     dic_pAN_n_pair = {x: 0 for x in res_pAN_list}
     dic_pAN_v = {x: np.zeros(len(res_pAN_list), dtype=np.float32) for x in res_pAN_list}
     dic_pAN_var_total = {x: 0 for x in res_pAN_list}
+    dic_pAN_var_total_jn = {x: 0 for x in res_pAN_list}
+    dic_pAN_var_total_jn_block = {i:{x: 0 for x in res_pAN_list} for i in range(dic_res['v_h'].shape[0])}
     
     for CHR in CHR_list:
         # df_annot_chr
@@ -335,21 +349,43 @@ def summarize(
                 dic_mat_G_chr[pAN].multiply(dic_mat_G_chr[x]).sum() for x in res_pAN_list
             ]
             dic_pAN_v[pAN] = dic_pAN_v[pAN] + np.array(temp_list, dtype=np.float32)
+            dic_pAN_var_total_jn[pAN] = dic_pAN_var_total_jn[pAN] + dic_mat_G_chr[pAN].dot(
+                v_persnp_h2_sqrt
+            ).T.dot(v_persnp_h2_sqrt)
+        
+        # Update info using dic_coef
+        v_persnp_h2 = np.zeros(dic_data[CHR]["pvar"].shape[0], dtype=np.float32)
+        for AN in res_AN_list:
+            v_persnp_h2 = v_persnp_h2 + dic_coef['LD:%s' % AN] * df_annot_chr[AN].values
+        v_persnp_h2_sqrt = np.sqrt(v_persnp_h2.clip(min=0)).astype(np.float32)
+
+        for pAN in res_pAN_list:
             dic_pAN_var_total[pAN] = dic_pAN_var_total[pAN] + dic_mat_G_chr[pAN].dot(
                 v_persnp_h2_sqrt
             ).T.dot(v_persnp_h2_sqrt)
-            
-#     return {"dic_AN_v" : dic_AN_v, "v_persnp_h2" : v_persnp_h2}
+        
+        # Update info for each JN block
+        for i in range(dic_res['v_h'].shape[0]):
+            v_persnp_h2 = np.zeros(dic_data[CHR]["pvar"].shape[0], dtype=np.float32)
+            for AN in res_AN_list:
+                v_persnp_h2 = v_persnp_h2 + df_coef_block.loc[i, 'LD:%s' % AN] * df_annot_chr[AN].values
+            v_persnp_h2_sqrt = np.sqrt(v_persnp_h2.clip(min=0)).astype(np.float32)
 
+            for pAN in res_pAN_list:
+                dic_pAN_var_total_jn_block[i][pAN] = dic_pAN_var_total_jn_block[i][pAN] + dic_mat_G_chr[pAN].dot(
+                    v_persnp_h2_sqrt
+                ).T.dot(v_persnp_h2_sqrt)
+            
     # Summary : n_snp,n_pair
     df_sum_tau["n_snp"] = [dic_AN_n_snp[x] for x in res_AN_list]
     df_sum_rho["n_pair"] = [dic_pAN_n_pair[x] for x in res_pAN_list]
-
-    # Summary : h2, h2_se, enrich, enrich_se
+    
+    # Summary : h2, h2_se, enrich, enrich_se    
     df_cov = pd.DataFrame(
         index=dic_res["term"], columns=dic_res["term"], data=dic_res["coef_jn_cov"]
     )
     temp_mat = df_cov.loc[res_LD_list, res_LD_list].values
+    
     for AN in res_AN_list:
         if dic_AN_type[AN] != "binary":
             continue
@@ -360,6 +396,17 @@ def summarize(
         # h2, h2_se
         df_sum_tau.loc[AN, "h2"] = (dic_AN_v[AN] * df_sum_tau["tau"]).sum()
         df_sum_tau.loc[AN, "h2_se"] = np.sqrt(dic_AN_v[AN].dot(temp_mat).dot(dic_AN_v[AN]))
+        
+        # JN for h2
+        v_coef = np.array([dic_coef["LD:%s" % x] for x in res_AN_list])
+        v_esti = [(dic_AN_v[AN] * v_coef).sum()]
+        mat_coef_jn = df_coef_block[["LD:%s" % x for x in res_AN_list]].values
+        mat_esti_jn = []
+        for i in range(mat_coef_jn.shape[0]):
+            mat_esti_jn.append((dic_AN_v[AN] * mat_coef_jn[i,:]).sum())
+        v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res['v_h'])
+        df_sum_tau.loc[AN, "h2_jn"] = v_mean_jn[0]
+        df_sum_tau.loc[AN, "h2_jnse"] = np.sqrt(mat_cov_jn[0,0])
 
         # enrich, enrich_se
         n_snp_dif = n_snp_ref - n_snp_AN
@@ -378,6 +425,21 @@ def summarize(
         df_sum_tau.loc[AN, "enrich_se"] = np.absolute(
             se_ / dif_ * (df_sum_tau.loc[AN, "enrich"] - 1)
         )
+        
+        # JN for enrich
+        v_coef = np.array([dic_coef["LD:%s" % x] for x in res_AN_list])
+        h2_ps = (dic_AN_v[AN] * v_coef).sum() / n_snp_AN
+        h2_ps_ref = (dic_AN_v_ref[AN] * v_coef).sum() / n_snp_ref
+        v_esti = [h2_ps / h2_ps_ref]
+        mat_coef_jn = df_coef_block[["LD:%s" % x for x in res_AN_list]].values
+        mat_esti_jn = []
+        for i in range(mat_coef_jn.shape[0]):
+            h2_ps = (dic_AN_v[AN] * mat_coef_jn[i,:]).sum() / n_snp_AN
+            h2_ps_ref = (dic_AN_v_ref[AN] * mat_coef_jn[i,:]).sum() / n_snp_ref
+            mat_esti_jn.append(h2_ps / h2_ps_ref)
+        v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res['v_h'])
+        df_sum_tau.loc[AN, "enrich_jn"] = v_mean_jn[0]
+        df_sum_tau.loc[AN, "enrich_jnse"] = np.sqrt(mat_cov_jn[0,0])
 
     # Summary : cov, cov_se, r2, r2_se
     temp_mat = df_cov.loc[res_DLD_list, res_DLD_list].values
@@ -385,10 +447,32 @@ def summarize(
         # cov, cov_se
         df_sum_rho.loc[pAN, "cov"] = (dic_pAN_v[pAN] * df_sum_rho["rho"]).sum()
         df_sum_rho.loc[pAN, "cov_se"] = np.sqrt(dic_pAN_v[pAN].dot(temp_mat).dot(dic_pAN_v[pAN]))
+        
+        # JN for cov
+        v_coef = np.array([dic_coef["DLD:%s" % x] for x in res_pAN_list])
+        v_esti = [(dic_pAN_v[pAN] * v_coef).sum()]
+        mat_coef_jn = df_coef_block[["DLD:%s" % x for x in res_pAN_list]].values
+        mat_esti_jn = []
+        for i in range(mat_coef_jn.shape[0]):
+            mat_esti_jn.append((dic_pAN_v[pAN] * mat_coef_jn[i,:]).sum())
+        v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res['v_h'])
+        df_sum_rho.loc[pAN, "cov_jn"] = v_mean_jn[0]
+        df_sum_rho.loc[pAN, "cov_jnse"] = np.sqrt(mat_cov_jn[0,0])
 
         # r2 and r2_se
-        df_sum_rho.loc[pAN, "r2"] = df_sum_rho.loc[pAN, "cov"] / dic_pAN_var_total[pAN]
-        df_sum_rho.loc[pAN, "r2_se"] = df_sum_rho.loc[pAN, "cov_se"] / dic_pAN_var_total[pAN]
+        df_sum_rho.loc[pAN, "r2"] = df_sum_rho.loc[pAN, "cov"] / dic_pAN_var_total_jn[pAN]
+        df_sum_rho.loc[pAN, "r2_se"] = df_sum_rho.loc[pAN, "cov_se"] / dic_pAN_var_total_jn[pAN]
+        
+        # JN for cov
+        v_coef = np.array([dic_coef["DLD:%s" % x] for x in res_pAN_list])
+        v_esti = [(dic_pAN_v[pAN] * v_coef).sum() / dic_pAN_var_total[pAN]]
+        mat_coef_jn = df_coef_block[["DLD:%s" % x for x in res_pAN_list]].values
+        mat_esti_jn = []
+        for i in range(mat_coef_jn.shape[0]):
+            mat_esti_jn.append((dic_pAN_v[pAN] * mat_coef_jn[i,:]).sum() / dic_pAN_var_total_jn_block[i][pAN])
+        v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res['v_h'])
+        df_sum_rho.loc[pAN, "r2_jn"] = v_mean_jn[0]
+        df_sum_rho.loc[pAN, "r2_jnse"] = np.sqrt(mat_cov_jn[0,0])
 
     return {"tau": df_sum_tau, "rho": df_sum_rho}
 
@@ -693,6 +777,12 @@ def bjn(v_esti, mat_esti_jn, v_h):
     mat_cov_jn : np.ndarray(dtype=np.float32)
         Jackknife covariance of shape (n_regressor, n_regressor).
     """
+    
+    v_esti = np.array(v_esti, dtype=np.float32)
+    mat_esti_jn = np.array(mat_esti_jn, dtype=np.float32)
+    if len(mat_esti_jn.shape) == 1:
+        mat_esti_jn = mat_esti_jn.reshape([-1, 1])
+        
     n_block,n_param = mat_esti_jn.shape
     v_mean_jn = ( - mat_esti_jn + v_esti).sum(axis=0) + ( mat_esti_jn.T / v_h ).sum(axis=1)
 
