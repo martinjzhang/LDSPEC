@@ -90,41 +90,40 @@ def reg(mat_Y, mat_X):
     return mat_coef
 
 
-def meta_analysis(effects, se, method='random', weights=None):
-    """ Random effect meta analysis
-    """
+def meta_analysis(effects, se, method="random", weights=None):
+    """Random effect meta analysis"""
     # From Omer Weissbrod
-    assert method in ['fixed', 'random']
+    assert method in ["fixed", "random"]
     d = effects
     variances = se**2
-    
-    #compute random-effects variance tau2
+
+    # compute random-effects variance tau2
     vwts = 1.0 / variances
-    fixedsumm = vwts.dot(d) / vwts.sum()    
-    Q = np.sum(((d - fixedsumm)**2) / variances)
-    df = len(d)-1
-    tau2 = np.maximum(0, (Q-df) / (vwts.sum() - vwts.dot(vwts) / vwts.sum()))
-    
-    #defing weights
+    fixedsumm = vwts.dot(d) / vwts.sum()
+    Q = np.sum(((d - fixedsumm) ** 2) / variances)
+    df = len(d) - 1
+    tau2 = np.maximum(0, (Q - df) / (vwts.sum() - vwts.dot(vwts) / vwts.sum()))
+
+    # defing weights
     if weights is None:
-        if method == 'fixed':
+        if method == "fixed":
             wt = 1.0 / variances
         else:
             wt = 1.0 / (variances + tau2)
     else:
         wt = weights
-    
-    #compute summtest
+
+    # compute summtest
     summ = wt.dot(d) / wt.sum()
-    if method == 'fixed':
-        varsum = np.sum(wt*wt*variances) / (np.sum(wt)**2)
+    if method == "fixed":
+        varsum = np.sum(wt * wt * variances) / (np.sum(wt) ** 2)
     else:
-        varsum = np.sum(wt*wt*(variances+tau2)) / (np.sum(wt)**2)
+        varsum = np.sum(wt * wt * (variances + tau2)) / (np.sum(wt) ** 2)
     ###summtest = summ / np.sqrt(varsum)
-    
-    summary=summ
-    se_summary=np.sqrt(varsum)
-    
+
+    summary = summ
+    se_summary = np.sqrt(varsum)
+
     return summary, se_summary
 
 
@@ -133,9 +132,9 @@ def zsc2pval(zsc, option="two-sided"):
     Convert z-score to one-sided p-value. Accurate up to `zsc=36` and `pval=4.2e-284`.
     """
     #     return 1 - sp.stats.norm.cdf(zsc)
-    if option=="one-sided":
+    if option == "one-sided":
         return sp.stats.norm.cdf(-zsc)  # This is more accurate
-    if option=="two-sided":
+    if option == "two-sided":
         return sp.stats.norm.cdf(-np.absolute(zsc)) * 2
 
 
@@ -190,7 +189,7 @@ def pannot_to_csr(v_gene, sym_non_pAN="non-pAN", flag_matS=True):
         mat_G.setdiag(
             False
         )  # This step is taking a bit longer time. Use mat_S for HP computing
-#         mat_G = sp.sparse.csr_matrix(mat_G)
+        #         mat_G = sp.sparse.csr_matrix(mat_G)
         mat_G.eliminate_zeros()
         return mat_G
 
@@ -253,14 +252,14 @@ def pannot_hr_to_csr_block(v_snp, snp_pair_list, block_size=int(1e6), verbose=Fa
     mat_G = None
 
     n_block = np.ceil(len(snp_pair_list) / block_size).astype(int)
-    
-    for i_block in range(n_block):        
+
+    for i_block in range(n_block):
         if verbose:
             print("Block %d/%d" % (i_block, n_block))
         ind_set = set()
         ind_s = i_block * block_size
-        ind_e = min((i_block+1)*block_size, len(snp_pair_list))
-        for s1, s2 in snp_pair_list[ind_s: ind_e]:
+        ind_e = min((i_block + 1) * block_size, len(snp_pair_list))
+        for s1, s2 in snp_pair_list[ind_s:ind_e]:
             ind_set.add((dic_snp[s1], dic_snp[s2]))
             ind_set.add((dic_snp[s2], dic_snp[s1]))
 
@@ -271,9 +270,11 @@ def pannot_hr_to_csr_block(v_snp, snp_pair_list, block_size=int(1e6), verbose=Fa
             col_ind.append(j)
 
         temp_mat_G = sp.sparse.csr_matrix(
-            ([True] * len(row_ind), (row_ind, col_ind)), shape=[n_snp, n_snp], dtype=bool
+            ([True] * len(row_ind), (row_ind, col_ind)),
+            shape=[n_snp, n_snp],
+            dtype=bool,
         )
-        
+
         if mat_G is None:
             mat_G = temp_mat_G.copy()
         else:
@@ -653,8 +654,8 @@ def read_annot(fpath, nrows=None):
 
 
 def get_annot_name_from_file(annot_file):
-    """ 
-    Get annotation name from file path. annot_file must end with 
+    """
+    Get annotation name from file path. annot_file must end with
     `.annot.gz` or `.pannot_mat.npz`.
     """
     annot_name = annot_file.split(os.path.sep)[-1]
@@ -666,13 +667,13 @@ def get_annot_name_from_file(annot_file):
         annot_type = "pAN:"
         annot_name = annot_name.replace(".pannot_mat.npz", "")
     else:
-        raise ValueError("annot_file must end with '.annot.gz' or '.pannot_mat.npz'")    
+        raise ValueError("annot_file must end with '.annot.gz' or '.pannot_mat.npz'")
     # CHR indicator
     annot_name = annot_name.replace("CHR@", "")
     annot_name = annot_name.replace("chr@", "")
     annot_name = annot_name.replace("C@", "")
     annot_name = annot_name.replace("c@", "")
-    # Formatting 
+    # Formatting
     annot_name = annot_name.replace(".", "_")
     annot_name = annot_name.replace("__", "_")
     annot_name = annot_name.strip("._,:")
@@ -692,7 +693,7 @@ def write_pannot_mat(snp_pair_list, snp_list, prefix_out):
         List of SNPs
     prefix_out : str
         Output prefix
-    """    
+    """
     mat_G = pannot_hr_to_csr_block(snp_list, snp_pair_list, verbose=False)
     sp.sparse.save_npz(prefix_out + ".pannot_mat", mat_G)
 
@@ -713,11 +714,11 @@ def read_pannot_mat(fpath):
     pAN : str
         Annotation name.
     """
-    
+
     # Check fpath
     err_msg = "fpath should end with '.pannot_mat.npz'"
     assert fpath.endswith(".pannot_mat.npz"), err_msg
-    
+
     mat_pannot = sp.sparse.load_npz(fpath)
     return mat_pannot
 
@@ -739,33 +740,33 @@ def read_ld(fpath):
     mat_ld : np.array(dtype=np.float32) or sp.sparse.csc_matrix(dtype=np.float32)
         LD matrix of dimension (n_ref_snp, n_snp)
     dic_range : dict
-        
+
         - dic_range['chr'] : chromosome
         - dic_range['start'] : start position
         - dic_range['end'] : end position
-        - dic_range['chr_ref'] : reference chromosome list (List)      
+        - dic_range['chr_ref'] : reference chromosome list (List)
     """
-    
+
     # Check fpath
     err_msg = "fpath should end with one of ['_fullld.npy', '_ld.npz'] : %s" % fpath
     assert fpath.endswith("_fullld.npy") | fpath.endswith("_ld.npz"), err_msg
-    
+
     if fpath.endswith("_fullld.npy"):
         mat_ld = np.load(fpath)
-        temp_str = [x for x in fpath.split('.') if x.endswith('_fullld')][0]
-        dic_range = parse_snp_range(temp_str)
-        
-    if fpath.endswith("_ld.npz"):
-        mat_ld = sp.sparse.load_npz(fpath)
-        temp_str = [x for x in fpath.split('.') if x.endswith('_ld')][0]
+        temp_str = [x for x in fpath.split(".") if x.endswith("_fullld")][0]
         dic_range = parse_snp_range(temp_str)
 
-    return mat_ld,dic_range
+    if fpath.endswith("_ld.npz"):
+        mat_ld = sp.sparse.load_npz(fpath)
+        temp_str = [x for x in fpath.split(".") if x.endswith("_ld")][0]
+        dic_range = parse_snp_range(temp_str)
+
+    return mat_ld, dic_range
 
 
 def parse_snp_range(snp_range):
-    """Get range of SNPs to analyze. 
-    
+    """Get range of SNPs to analyze.
+
     Parameters
     ----------
     snp_range: str
@@ -774,7 +775,7 @@ def parse_snp_range(snp_range):
     Returns
     -------
     dic_range : dict
-        
+
         - dic_range['chr'] : chromosome
         - dic_range['start'] : start position
         - dic_range['end'] : end position
@@ -831,12 +832,13 @@ def parse_snp_range(snp_range):
 
 
 def get_mbin(maf):
-    if maf>=0.05:
+    if maf >= 0.05:
         return "common"
-    elif maf>=0.005:
+    elif maf >= 0.005:
         return "lf"
     else:
         return "rare"
+
 
 ################################################################################
 ###################################### CLI #####################################

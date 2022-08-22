@@ -12,7 +12,7 @@ def estimate(
     df_sumstats,
     dic_annot_path={},
     dic_pannot_path={},
-    dic_pannot_avgr={},
+    dic_avgr={},
     flag_cross_term=False,
     n_jn_block=100,
     verbose=False,
@@ -149,7 +149,7 @@ def estimate(
         dic_data,
         dic_annot_path=dic_annot_path,
         dic_pannot_path=dic_pannot_path,
-        dic_pannot_avgr=dic_pannot_avgr,
+        dic_avgr=dic_avgr,
     )
 
     if verbose:
@@ -163,7 +163,7 @@ def summarize(
     dic_data,
     dic_annot_path={},
     dic_pannot_path={},
-    dic_pannot_avgr={},
+    dic_avgr={},
 ):
     """
     Summarize GDREG result.
@@ -190,8 +190,8 @@ def summarize(
         File path for SNP-pair annotation. dic_pannot_path[annot_name][CHR] contains the
         `.pannot_mat.npz` file path for annotation pAN and and CHR `CHR`. Dimension of the
         sparse matrix should match `dic_data[CHR][pvar]`.
-    dic_pannot_avgr : dic, default={}
-        dic_pannot_avgr[pAN] contains the average LD across all pairs in pAN.
+    dic_avgr : dic, default={}
+        dic_avgr[pAN] contains the average LD across all pairs in pAN.
 
     Returns
     -------
@@ -228,8 +228,8 @@ def summarize(
         AN_list.extend([x for x in temp_df if x.startswith("AN:")])
     pAN_list = list(dic_pannot_path)
 
-    if len(dic_pannot_avgr) == 0:
-        dic_pannot_avgr = {x: 0.1 for x in pAN_list}
+    if len(dic_avgr) == 0:
+        dic_avgr = {x: 0 for x in pAN_list}
 
     # dis_res
     res_AN_list = [x.replace("LD:", "") for x in dic_res["term"] if x.startswith("LD:")]
@@ -240,7 +240,7 @@ def summarize(
     assert len(set(res_AN_list) - set(AN_list)) == 0, err_msg
     err_msg = "dic_pannot_mat does not contain all pannots in dic_res"
     assert len(set(res_pAN_list) - set(pAN_list)) == 0, err_msg
-    # TODO : check dic_pannot_avgr
+    # TODO : check dic_avgr
 
     temp_list = [x.replace("DLD:", "").replace("LD:", "") for x in dic_res["term"]]
     dic_coef = {x: y for x, y in zip(temp_list, dic_res["coef"])}
@@ -399,12 +399,12 @@ def summarize(
                     ref_col_list = [x for x in res_AN_list if x.endswith(term)]
             ind_ref = ((df_annot_chr[ref_col_list].values == 1).sum(axis=1) > 0) * 1
             for i_pAN, pAN in enumerate(res_pAN_list):
-                dic_AN_v_p[AN][i_pAN] += dic_pannot_avgr[pAN] * (
+                dic_AN_v_p[AN][i_pAN] += dic_avgr[pAN] * (
                     dic_mat_G_chr[pAN]
                     .dot(df_annot_chr[AN].values)
                     .T.dot(df_annot_chr[AN].values)
                 )
-                dic_AN_v_p_ref[AN][i_pAN] += dic_pannot_avgr[pAN] * (
+                dic_AN_v_p_ref[AN][i_pAN] += dic_avgr[pAN] * (
                     dic_mat_G_chr[pAN].dot(ind_ref).T.dot(ind_ref)
                 )
 
