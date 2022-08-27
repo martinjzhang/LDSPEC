@@ -11,7 +11,7 @@ import gdreg
 
 
 """
-Job desecription
+Job description
 ----------------
 
 get_snp_block : generate SNP blocks based on sample size and memory
@@ -27,20 +27,18 @@ compute_score : compute LD and DLD scores.
     | [--flag_cross_term]
     - Output : LD and DLD scores.
     
-compute_avgr : compute avgr for each pannot. "--ld_file" should contain all LD files
+compute_avgr : compute average LD (avgr) for each pannot. "--ld_file" should contain all LD files
     - Input : --job | --pgen_file | --prefix_out | --annot_file | --ld_file | [--random_seed]
     - Output : Avg. LD for each pannot.
     
 regress : infer parameters \tau and \rho.
-    - Input : --job | --pgen_file | --score_file | --sumstats_file | --annot_file | --prefix_out
-    | [--flag_cross_term]
+    - Input : --job | --pgen_file | --score_file | --sumstats_file | --annot_file | --avgr_file
+    | --prefix_out | [--flag_cross_term]
     - Output : GDREG result.
     
 TODO
 ----
 - Double check file consistency 
-- Update reading of LD file
-- Add job --summarize_pannot
 - 
 """
 
@@ -55,13 +53,12 @@ def main(args):
     JOB = args.job
     PGEN_FILE = args.pgen_file
     LD_FILE = args.ld_file
+    ANNOT_FILE = args.annot_file
     SCORE_FILE = args.score_file
     SUMSTATS_FILE = args.sumstats_file
-    ANNOT_FILE = args.annot_file
     AVGR_FILE = args.avgr_file
     PREFIX_OUT = args.prefix_out
     SNP_RANGE = args.snp_range
-    RANDOM_SEED = args.random_seed
     FLAG_FULL_LD = args.flag_full_ld
     FLAG_CROSS_TERM = args.flag_cross_term
 
@@ -96,19 +93,18 @@ def main(args):
     header += "--job %s\\\n" % JOB
     header += "--pgen_file %s\\\n" % PGEN_FILE
     header += "--ld_file %s\\\n" % LD_FILE
+    header += "--annot_file %s\\\n" % ANNOT_FILE
     header += "--score_file %s\\\n" % SCORE_FILE
     header += "--sumstats_file %s\\\n" % SUMSTATS_FILE
-    header += "--annot_file %s\\\n" % ANNOT_FILE
     header += "--avgr_file %s\\\n" % AVGR_FILE
     header += "--prefix_out %s\\\n" % PREFIX_OUT
     header += "--snp_range %s\\\n" % SNP_RANGE
-    header += "--random_seed %d\\\n" % RANDOM_SEED
     header += "--flag_full_ld %s\\\n" % FLAG_FULL_LD
     header += "--flag_cross_term %s\n" % FLAG_CROSS_TERM
     print(header)
 
     ###########################################################################################
-    ######                                   Data Loading                                ######
+    ######                                  Data Loading                                 ######
     ###########################################################################################
     # Load --pgen_file
     if JOB in [
@@ -120,11 +116,11 @@ def main(args):
     ]:
         print("# Loading --pgen_file")
         dic_data = {}
-        if "@" not in PGEN_FILE:
+        if "@" not in PGEN_FILE:  # Load single CHR
             temp_dic = gdreg.util.read_pgen(PGEN_FILE)
             dic_data[temp_dic["pvar"]["CHR"][0]] = temp_dic.copy()
         else:
-            for CHR in range(1, 23):
+            for CHR in range(1, 23):  # Check all 23 CHRs
                 if os.path.exists(PGEN_FILE.replace("@", "%s" % CHR) + ".pgen"):
                     dic_data[CHR] = gdreg.util.read_pgen(
                         PGEN_FILE.replace("@", "%s" % CHR)
@@ -143,9 +139,23 @@ def main(args):
             )
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
+    # Load --ld_file (lazy)
+    if JOB in ["compute_avgr"]:
+        print("# Loading --ld_file (dic_ld_path)")
+        dic_ld_path = {x: [] for x in dic_data}
+        for fpath in gdreg.util.from_filepattern(LD_FILE, sub="@"):
+            temp_str = [x for x in fpath.split(".") if x.endswith("_ld")][0]
+            dic_range = gdreg.util.parse_snp_range(temp_str)
+            if dic_range["chr"] in dic_ld_path:  # Load only files for CHRs in dic_data
+                dic_ld_path[dic_range["chr"]].append(fpath)
+            else:
+                print("    Skip: %s" % fpath)
+        for CHR in dic_ld_path:
+            print("    CHR%2d: detected %d LD files" % (CHR, len(dic_ld_path[CHR])))
+
     # Load --ld_file
     if JOB in ["compute_score"]:
-        print("# Loading --ld_file")
+        print("# Loading --ld_file (mat_ld)")
         assert os.path.exists(LD_FILE), "--ld_file does not exist"
         mat_ld, dic_range = gdreg.util.read_ld(LD_FILE)
         mat_ld.data[np.isnan(mat_ld.data)] = 0
@@ -166,42 +176,182 @@ def main(args):
         print("    LD info loaded, matching --pgen_file")
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
-    # Load --ld_file (lazy)
-    if JOB in ["compute_avgr"]:
-        print("# Loading --ld_file (lazy)")
-        dic_ld_path = {x: [] for x in dic_data}
-        for fpath in gdreg.util.from_filepattern(LD_FILE):
-            temp_str = [x for x in fpath.split(".") if x.endswith("_ld")][0]
-            dic_range = gdreg.util.parse_snp_range(temp_str)
-            if dic_range["chr"] in dic_ld_path:
-                dic_ld_path[dic_range["chr"]].append(fpath)
-            else:
-                print("    Skip: %s" % fpath)
-        for CHR in dic_ld_path:
-            print("    CHR%-2d: detected %d LD files" % (CHR, len(dic_ld_path[CHR])))
+    # Load --sumstats_file
+    if JOB in ["regress"]:
+        print("# Loading --sumstats_file")
+        df_sumstats = pd.read_csv(SUMSTATS_FILE, sep="\t", index_col=None)
+        print("    .sumstats.gz loaded, %d SNPs" % df_sumstats.shape[0])
+        print("    " + gdreg.util.get_sys_info(sys_start_time))
+
+    # Load --annot_file (lazy loading)
+    if JOB in ["compute_score", "compute_avgr", "regress"]:
+        print("# Loading --annot_file")
+        dic_annot_path = {}
+        dic_pannot_path = {}
+
+        for annot_file in ANNOT_FILE.split(","):
+            annot_file = annot_file.strip()
+            if annot_file.endswith((".annot.gz", ".pannot_mat.npz")) is False:
+                print("    Skip: %s" % annot_file)
+                continue
+            annot_name = gdreg.util.get_annot_name_from_file(annot_file)
+            if annot_file.endswith(".annot.gz"):
+                dic_annot_path[annot_name] = {}
+                for CHR in dic_data:
+                    fpath = annot_file.replace("@", "%d" % CHR)
+                    if os.path.exists(fpath):
+                        dic_annot_path[annot_name][CHR] = fpath
+                CHR_set_annot = set(dic_annot_path[annot_name])
+            if annot_file.endswith(".pannot_mat.npz"):
+                dic_pannot_path[annot_name] = {}
+                for CHR in dic_data:
+                    fpath = annot_file.replace("@", "%d" % CHR)
+                    if os.path.exists(fpath):
+                        dic_pannot_path[annot_name][CHR] = fpath
+                CHR_set_annot = set(dic_pannot_path[annot_name])
+
+        # Check: all annots and pannots have the same set of CHRs
+        for annot_name in dic_annot_path:
+            err_msg = "Set of CHRs does not match for %s" % annot_name
+            assert set(dic_annot_path[annot_name]) == CHR_set_annot, err_msg
+        for annot_name in dic_pannot_path:
+            err_msg = "Set of CHRs does not match for %s" % annot_name
+            assert set(dic_pannot_path[annot_name]) == CHR_set_annot, err_msg
+        print(
+            "    Detected %d CHRs for all files: %s"
+            % (len(CHR_set_annot), ",".join(["%d" % x for x in CHR_set_annot]))
+        )
+
+        # Check: annots have the same col_list across CHRs
+        for annot_name in dic_annot_path:
+            CHR0 = list(CHR_set_annot)[0]
+            col_list = list(
+                gdreg.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
+            )
+            for CHR in CHR_set_annot:
+                temp_df = gdreg.util.read_annot(
+                    dic_annot_path[annot_name][CHR], nrows=5
+                )
+                err_msg = "%s : columns mismatch between CHR%d and CHR%d" % (
+                    annot_name,
+                    CHR0,
+                    CHR,
+                )
+                assert list(temp_df) == col_list, err_msg
+            print("    %s: columms match for all CHRs. Containing" % annot_name)
+            temp_str = ",".join([x for x in col_list if x.startswith("AN:")])
+            print("        %s" % temp_str)
+
+        # Check: pannots have the same shape as pvar file
+        for annot_name in dic_pannot_path:
+            CHR = np.random.choice(list(CHR_set_annot), size=1)[0]
+            mat_G = gdreg.util.read_pannot_mat(dic_pannot_path[annot_name][CHR])
+            err_msg = "(%s, CHR%d) : n_snp=%d, mismatch with --pgen_file" % (
+                annot_name,
+                CHR,
+                mat_G.shape[0],
+            )
+            assert mat_G.shape[0] == dic_data[CHR]["pvar"].shape[0], err_msg
+            print(
+                "    %s (%d CHRs) : CHR%d dimension matches with .pvar"
+                % (annot_name, len(dic_pannot_path[annot_name]), CHR)
+            )
+
+    # Load --avgr_file
+    if JOB in ["regress"]:
+        print("# Loading --avgr_file")
+        if AVGR_FILE is not None:
+            dic_avgr = {}
+            for fpath in AVGR_FILE.split(","):
+                fpath = fpath.strip()
+                if os.path.exists(fpath):
+                    temp_df = pd.read_csv(fpath, sep="\t", header=None)
+                    dic_avgr.update({x: y for x, y in zip(temp_df[0], temp_df[1]) if x in dic_pannot_path})
+                else:
+                    print("    Skip: %s" % fpath)
+            print(
+                "    Detected AVGR for %d/%d pannots"
+                % (len(dic_avgr), len(dic_pannot_path))
+            )
+            for pAN in dic_pannot_path:
+                if pAN not in dic_avgr:
+                    print("    Missing AVGR for %s, pad 0" % pAN)
+                    dic_avgr[pAN] = 0
+        else:
+            print("--avgr_file missing, add 0 to pannots")
+            dic_avgr = {x: 0 for x in dic_pannot_path}
+        for pAN in dic_avgr:
+            print("    %s: %0.4f" % (pAN, dic_avgr[pAN]))
 
     # Load --score_file
     if JOB in ["regress"]:
         print("# Loading --score_file")
-        chr_list_score = set(dic_data)
+        # CHR_list_score containing all score files
+        CHR_list_score = set(dic_data)
         for score_file in SCORE_FILE.split(","):
-            print("    %s" % score_file)
-            chr_list_score = chr_list_score & set(
-                [
-                    x
-                    for x in dic_data
-                    if os.path.exists(score_file.replace("@", "%d" % x))
-                ]
-            )
+            temp_list = []
+            for CHR in CHR_list_score:
+                if os.path.exists(score_file.replace("@", "%d" % CHR)):
+                    temp_list.append(CHR)
+            CHR_list_score = CHR_list_score & set(temp_list)
+        CHR_list_score = sorted(CHR_list_score)
         print(
             "    Detected all score files for %d CHRs: %s"
-            % (len(chr_list_score), ",".join(["%d" % x for x in chr_list_score]))
+            % (len(CHR_list_score), ",".join(["%d" % x for x in CHR_list_score]))
         )
 
+        # Preload to get info
+        df_score = None
+        for score_file in SCORE_FILE.split(","):
+            CHR0 = CHR_list_score[0]
+            score_file = score_file.strip().replace("@", "%d" % CHR0)
+            temp_df = pd.read_csv(score_file, sep="\t", index_col=None, nrows=100)
+            temp_df.index = temp_df["SNP"]
+            if df_score is None:
+                df_score = temp_df.copy()
+            else:
+                col_list = [x for x in temp_df if x not in df_score]
+                df_score = df_score.join(temp_df[col_list])
+
+        AN_list_score = [x.replace("LD:", "") for x in df_score if x.startswith("LD:")]
+        pAN_list_score = [
+            x.replace("DLD:", "") for x in df_score if x.startswith("DLD:")
+        ]
+
+        print(
+            "    Detected %d LD scores: %s"
+            % (len(AN_list_score), ",".join(AN_list_score))
+        )
+        print(
+            "    Detected %d DLD scores: %s"
+            % (len(pAN_list_score), ",".join(pAN_list_score))
+        )
+
+        # Check: if all scores have annots/pannots
+        AN_list, CHR0 = [], list(CHR_set_annot)[0]
+        for annot_name in dic_annot_path:
+            temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
+            AN_list.extend([x for x in temp_df if x.startswith("AN:")])
+        pAN_list = list(dic_pannot_path)
+
+        temp_list = list(set(AN_list_score) - set(AN_list))
+        err_msg = "%d scores without annots: %s" % (
+            len(temp_list),
+            ",".join(temp_list),
+        )
+        assert len(temp_list) == 0, err_msg
+        temp_list = list(set(pAN_list_score) - set(pAN_list))
+        err_msg = "%d scores without pannots: %s" % (
+            len(temp_list),
+            ",".join(temp_list),
+        )
+        assert len(temp_list) == 0, err_msg
+
+        # Finally, load all score files
         df_score = None
         for score_file in SCORE_FILE.split(","):
             df_list = []
-            for CHR in chr_list_score:
+            for CHR in CHR_list_score:
                 fpath = score_file.replace("@", "%d" % CHR)
                 if os.path.exists(fpath):
                     temp_df = pd.read_csv(fpath, sep="\t", index_col=None)
@@ -218,148 +368,14 @@ def main(args):
                 df_score = df_score.join(temp_df[col_list])
             del temp_df
 
+        df_score = df_score.loc[df_score.isna().sum(axis=1) == 0].copy()
         df_score.sort_values(["CHR", "BP"], inplace=True)
         df_score.index = df_score["SNP"]
-        LD_list = [x for x in df_score if x.startswith("LD:")]
-        DLD_list = [x for x in df_score if x.startswith("DLD:")]
-
-        print(
-            "    score file loaded for %d SNPs, %d LD scores, %d DLD scores"
-            % (df_score.shape[0], len(LD_list), len(DLD_list))
-        )
+        n_snp = df_score.shape[0]
+        n_LD = len([x for x in df_score if x.startswith("LD:")])
+        n_DLD = len([x for x in df_score if x.startswith("DLD:")])
+        print("    Loaded: %d SNPs, %d LD scores, %d DLD scores" % (n_snp, n_LD, n_DLD))
         print("    " + gdreg.util.get_sys_info(sys_start_time))
-
-    # Load --sumstats_file
-    if JOB in ["regress"]:
-        print("# Loading --sumstats_file")
-        df_sumstats = pd.read_csv(SUMSTATS_FILE, sep="\t", index_col=None)
-        print("    .sumstats.gz loaded, %d SNPs" % df_sumstats.shape[0])
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
-
-    # Load --annot_file (lazy loading)
-    if JOB in ["compute_score", "compute_avgr", "regress"]:
-        print("# Loading --annot_file")
-        dic_annot_path = {}
-        dic_pannot_path = {}
-
-        for annot_file in ANNOT_FILE.split(","):
-            if annot_file.endswith((".annot.gz", ".pannot_mat.npz")) is False:
-                print("    Skip: %s" % annot_file)
-                continue
-
-            annot_name = gdreg.util.get_annot_name_from_file(annot_file)
-            if annot_file.endswith(".annot.gz"):
-                # Loading .annot.gz
-                dic_annot_path[annot_name] = {}
-                for CHR in dic_data:
-                    fpath = annot_file.replace("@", "%d" % CHR)
-                    if os.path.exists(fpath):
-                        dic_annot_path[annot_name][CHR] = fpath
-                # Checking .annot.gz
-                CHR0 = list(dic_annot_path[annot_name])[0]
-                col_list = list(
-                    gdreg.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
-                )
-                for CHR in dic_annot_path[annot_name]:
-                    temp_df = gdreg.util.read_annot(
-                        dic_annot_path[annot_name][CHR], nrows=5
-                    )
-                    err_msg = "%s : columns mismatch between CHR%d and CHR%d" % (
-                        annot_name,
-                        CHR0,
-                        CHR,
-                    )
-                    assert list(temp_df) == col_list, err_msg
-                print(
-                    "    %s (%d CHRs) : columms match for all CHRs. Containing:"
-                    % (annot_name, len(dic_annot_path[annot_name]))
-                )
-                temp_str = ",".join([x for x in col_list if x.startswith("AN:")])
-                print("        %s" % temp_str)
-
-            if annot_file.endswith(".pannot_mat.npz"):
-                # Loading .pannot_mat.npz
-                dic_pannot_path[annot_name] = {}
-                for CHR in dic_data:
-                    fpath = annot_file.replace("@", "%d" % CHR)
-                    if os.path.exists(fpath):
-                        dic_pannot_path[annot_name][CHR] = fpath
-                # Checking .pannot_mat.npz
-                CHR = np.random.choice(list(dic_pannot_path[annot_name]), size=1)[0]
-                mat_G = gdreg.util.read_pannot_mat(dic_pannot_path[annot_name][CHR])
-                err_msg = "(%s, CHR%d) : n_snp=%d, mismatch with --pgen_file" % (
-                    annot_name,
-                    CHR,
-                    mat_G.shape[0],
-                )
-                assert mat_G.shape[0] == dic_data[CHR]["pvar"].shape[0], err_msg
-                print(
-                    "    %s (%d CHRs) : CHR%d dimension matches with .pvar"
-                    % (annot_name, len(dic_pannot_path[annot_name]), CHR)
-                )
-
-        # Check CHR_set
-        if len(dic_annot_path) > 0:
-            annot_name = list(dic_annot_path)[0]
-            CHR_set = set(dic_annot_path[annot_name])
-        else:
-            annot_name = list(dic_pannot_path)[0]
-            CHR_set = set(dic_pannot_path[annot_name])
-        for annot_name in dic_annot_path:
-            err_msg = "Set of CHRs does not match for %s" % annot_name
-            assert set(dic_annot_path[annot_name]) == CHR_set, err_msg
-        for annot_name in dic_pannot_path:
-            err_msg = "Set of CHRs does not match for %s" % annot_name
-            assert set(dic_pannot_path[annot_name]) == CHR_set, err_msg
-        print(
-            "    Detected %d CHRs for all files : %s"
-            % (len(CHR_set), ",".join(["%d" % x for x in CHR_set]))
-        )
-
-        # Check if having all annots/pannots
-        if SCORE_FILE is not None:
-            AN_list_score = [
-                x.replace("LD:", "") for x in df_score if x.startswith("LD:")
-            ]
-            pAN_list_score = [
-                x.replace("DLD:", "") for x in df_score if x.startswith("DLD:")
-            ]
-            AN_list, CHR = [], list(CHR_set)[0]
-            for annot_name in dic_annot_path:
-                temp_df = gdreg.util.read_annot(
-                    dic_annot_path[annot_name][CHR], nrows=5
-                )
-                AN_list.extend([x for x in temp_df if x.startswith("AN:")])
-            pAN_list = list(dic_pannot_path)
-
-            drop_list1 = ["LD:%s" % x for x in (set(AN_list_score) - set(AN_list))]
-            drop_list2 = ["DLD:%s" % x for x in (set(pAN_list_score) - set(pAN_list))]
-            drop_list = drop_list1 + drop_list2
-            if len(drop_list) > 0:
-                print("    Remove scores without ANNOT_FILE: %s" % ",".join(drop_list))
-            df_score.drop(columns=drop_list, inplace=True)
-
-        # .avgr
-        if AVGR_FILE is not None:
-            dic_avgr = {}
-            for fpath in AVGR_FILE.split(","):
-                fpath = fpath.strip()
-                if os.path.exists(fpath):
-                    temp_df = pd.read_csv(fpath, sep="\t", header=None)
-                    dic_avgr.update({x: y for x, y in zip(temp_df[0], temp_df[1])})
-                else:
-                    print("    Skip: %s" % fpath)
-            print(
-                "    Detected AVGR for %d/%d pannots"
-                % (len(dic_avgr), len(dic_pannot_path))
-            )
-            for pAN in dic_pannot_path:
-                if pAN not in dic_avgr:
-                    print("    Missing AVGR for %s, pad 0" % pAN)
-                    dic_avgr[pAN] = 0
-        else:
-            print("--avgr_file missing, add 0 to pannots")
-            dic_avgr = {x: 0 for x in dic_pannot_path}
 
     ###########################################################################################
     ######                                  Computation                                  ######
@@ -476,7 +492,7 @@ def main(args):
 
     if JOB == "compute_avgr":
         print("# Running --job compute_avgr")
-        dic_avgr = gdreg.score.compute_avgr(dic_pannot_path, dic_ld_path, verbose=False)
+        dic_avgr = gdreg.score.compute_avgr(dic_pannot_path, dic_ld_path, verbose=True)
         with open(PREFIX_OUT + ".avgr", "w") as f:
             for pAN in dic_avgr:
                 f.write("%s\t%0.6f\n" % (pAN, dic_avgr[pAN]))
@@ -512,12 +528,14 @@ if __name__ == "__main__":
 
     parser.add_argument("--job", type=str, required=True, help="One of [compute_ld]")
     parser.add_argument("--pgen_file", type=str, required=False, default=None)
-    parser.add_argument("--ld_file", type=str, required=False, default=None)
-    parser.add_argument("--score_file", type=str, required=False, default=None)
-    parser.add_argument("--sumstats_file", type=str, required=False, default=None)
+    parser.add_argument(
+        "--ld_file", type=str, required=False, default=None, help=".<range>_ld.npz"
+    )
     parser.add_argument(
         "--annot_file", type=str, required=False, default=None, help="Contain all SNPs"
     )
+    parser.add_argument("--score_file", type=str, required=False, default=None)
+    parser.add_argument("--sumstats_file", type=str, required=False, default=None)
     parser.add_argument("--avgr_file", type=str, required=False, default=None)
     parser.add_argument("--prefix_out", type=str, required=True)
     parser.add_argument(
@@ -526,8 +544,6 @@ if __name__ == "__main__":
         default=None,
         help="c1_s20_e1701_r1, '_rall' for all ref CHRs",
     )
-    parser.add_argument("--memory", type=int, default=1024)
-    parser.add_argument("--random_seed", type=int, default=0)
     parser.add_argument("--flag_full_ld", type=bool, default=False)
     parser.add_argument("--flag_cross_term", type=bool, default=False)
 

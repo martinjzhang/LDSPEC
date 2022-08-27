@@ -271,9 +271,9 @@ def summarize(
             "h2s_se": np.nan,
             "h2p": np.nan,  # SNP-pair heritability
             "h2p_se": np.nan,
-            "enrich": np.nan,
-            "enrich_se": np.nan,
-            "enrich_p": np.nan,
+            "h2_enrich": np.nan,
+            "h2_enrich_se": np.nan,
+            "h2_enrich_p": np.nan,
             "h2s_enrich": np.nan,
             "h2s_enrich_se": np.nan,
             "h2s_enrich_p": np.nan,

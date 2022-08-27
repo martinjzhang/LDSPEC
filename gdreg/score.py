@@ -164,24 +164,36 @@ def compute_avgr(
     dic_avgr : dic, default={}
         dic_avgr[pAN] contains the average LD across all pairs in pAN.
     """
+    start_time = time.time()
+    np.random.seed(0)
+    
     pAN_list = list(dic_pannot_path)
     dic_sumr = {x: 0 for x in pAN_list}
     dic_n = {x: 0 for x in pAN_list}
 
     for CHR in dic_ld_path:
+        if verbose: 
+            print("CHR%2d (%d LD files)" % (CHR, len(dic_ld_path[CHR])))
         dic_mat_G_chr = {}
         for pAN in pAN_list:
             dic_mat_G_chr[pAN] = gdreg.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
-
-        for ld_file in dic_ld_path[CHR]:
+        
+        for i,ld_file in enumerate(dic_ld_path[CHR]):
+            if np.random.rand(1)[0]>0.2:
+                continue
             mat_ld, dic_range = gdreg.util.read_ld(ld_file)
+            mat_ld.data[np.isnan(mat_ld.data)] = 0
             for pAN in pAN_list:
                 temp_mat_G = dic_mat_G_chr[pAN][
                     dic_range["start"] : dic_range["end"], :
                 ].T
                 dic_sumr[pAN] += temp_mat_G.multiply(mat_ld).sum()
-                dic_n[pAN] += temp_mat_G.multiply(mat_ld != 0).sum()
+                dic_n[pAN] += temp_mat_G.sum()            
+            if verbose:
+                print("    LD file %d/%d, time=%0.1fs" % (i, len(dic_ld_path[CHR]), time.time() - start_time))
     dic_avgr = {x: dic_sumr[x] / dic_n[x] for x in pAN_list}
+    if verbose:
+        print("    Completed, time=%0.1fs" % (time.time() - start_time))
     return dic_avgr
 
 

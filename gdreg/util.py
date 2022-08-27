@@ -136,6 +136,13 @@ def zsc2pval(zsc, option="two-sided"):
         return sp.stats.norm.cdf(-zsc)  # This is more accurate
     if option == "two-sided":
         return sp.stats.norm.cdf(-np.absolute(zsc)) * 2
+    
+    
+def pval2zsc(pval):
+    """
+    Convert one-sided p-value to z-score. Accurate up to `zsc=36` and `pval=4.2e-284`.
+    """
+    return -sp.stats.norm.ppf(pval)
 
 
 ################################################################################
