@@ -267,7 +267,7 @@ def summarize_snp_effect(
             "p_causal": np.nan,
             "tau": np.nan,
             "h2": np.nan,
-            "enrich": np.nan,
+            "h2_enrich": np.nan,
         },
     )
 
@@ -328,9 +328,9 @@ def summarize_snp_effect(
         df_sum_tau.loc[AN, "h2"] = df_phen[AN].var() / df_phen["TRAIT"].var()
         h2ps = df_sum_tau.loc[AN, "h2"] / df_sum_tau.loc[AN, "n_snp"]
         if AN.endswith("_common"):
-            df_sum_tau.loc[AN, "enrich"] = h2ps / h2_common_ps
+            df_sum_tau.loc[AN, "h2_enrich"] = h2ps / h2_common_ps
         if AN.endswith("_lf"):
-            df_sum_tau.loc[AN, "enrich"] = h2ps / h2_lf_ps
+            df_sum_tau.loc[AN, "h2_enrich"] = h2ps / h2_lf_ps
 
     v_h2ps = np.zeros(df_snp.shape[0], dtype=np.float32)
     for AN in AN_list:

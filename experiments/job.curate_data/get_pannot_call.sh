@@ -9,16 +9,16 @@
 #SBATCH -e /home/jz286/WES_analysis/wes_rare/experiments/job_info/hostname_%j.err 
 #SBATCH --mail-type=NONE#SBATCH --mail-type=NONE
 
-# Gencode : gene
-for CHROM in {2,3,16}
-# for CHROM in 16
-do
-PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3
-OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/gene
-# python get_pannot_s1_gencode.py --pgen_file $PGEN_FILE --pannot gene --out_path $OUT_PATH
-sbatch -p short -t 0-03:00 -n 1 -c 1 --mem=128000 --open-mode=truncate -o $OUT_PATH/gene.chr${CHROM}.sbatch.log --wrap " \
-python get_pannot_s3_gencode.py --pgen_file $PGEN_FILE --pannot gene --out_path $OUT_PATH"
-done
+# # Gencode : gene
+# for CHROM in {2,3,16}
+# # for CHROM in 16
+# do
+# PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3
+# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/gene
+# # python get_pannot_s1_gencode.py --pgen_file $PGEN_FILE --pannot gene --out_path $OUT_PATH
+# sbatch -p short -t 0-03:00 -n 1 -c 1 --mem=128000 --open-mode=truncate -o $OUT_PATH/gene.chr${CHROM}.sbatch.log --wrap " \
+# python get_pannot_s3_gencode.py --pgen_file $PGEN_FILE --pannot gene --out_path $OUT_PATH"
+# done
 
 # # Gencode : exon
 # for CHROM in {1..21}
@@ -90,13 +90,36 @@ done
 # python pannot_s2_proxy.py --pgen_file $PGEN_FILE --lb 1000 --ub 10000 --out_path $OUT_PATH"
 # done
 
-# # ldp5_proxy_10000
-# for CHROM in {1..22}
+# # ldp5_proxy
+# for CHROM in {1..21}
+# # for CHROM in 22
 # do
 # PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3
 # LD_FILE=/n/scratch3/users/j/jz286/imp_geno.gdreg_ld/ukb_imp_v3.@_ld.npz
-# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot_ldp5_proxy_10000
-# # python pannot_s3_ld.py --pgen_file $PGEN_FILE --ld_file $LD_FILE --out_path $OUT_PATH
-# sbatch -p short -t 0-6:00 -n 1 -c 1 --mem=64000 --open-mode=truncate -o $OUT_PATH/ldp5_proxy_10000.chr${CHROM}.sbatch.log --wrap " \
-# python pannot_s3_ld.py --pgen_file $PGEN_FILE --ld_file $LD_FILE --out_path $OUT_PATH"
+# # OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/pannot_ldp5_proxy_0_100
+# # OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/pannot_ldp5_proxy_100_1000
+# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/pannot_ldp5_proxy_1000_10000
+# # python get_pannot_s2_ld.py --pgen_file $PGEN_FILE --lb 0 --ub 100 --ld_file $LD_FILE --out_path $OUT_PATH
+# sbatch -p short -t 0-3:00 -n 1 -c 1 --mem=32000 --open-mode=truncate -o $OUT_PATH/chr${CHROM}.sbatch.log --wrap " \
+# python get_pannot_s2_ld.py --pgen_file $PGEN_FILE --lb 1000 --ub 10000 --ld_file $LD_FILE --out_path $OUT_PATH"
 # done
+
+# Loop
+# for CHROM in {1..21}
+for CHROM in 22
+do
+PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3
+LOOP_FILE=/n/groups/price/martin/data_GDREG/gene_annotation/3dgenome_loops/Dixon_2015.H1-ESC.hg19.peakachu-merged.loops
+OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/Dixon_2015_H1_ESC
+LOOP_FILE=/n/groups/price/martin/data_GDREG/gene_annotation/3dgenome_loops/Dixon_2015.H1-MES.hg19.peakachu-merged.loops
+OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/Dixon_2015_H1_MES
+# LOOP_FILE=/n/groups/price/martin/data_GDREG/gene_annotation/3dgenome_loops/Dixon_2015.H1-MSC.hg19.peakachu-merged.loops
+# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/Dixon_2015_H1_MSC
+# LOOP_FILE=/n/groups/price/martin/data_GDREG/gene_annotation/3dgenome_loops/Dixon_2015.H1-NPC.hg19.peakachu-merged.loops
+# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/Dixon_2015_H1_NPC
+# LOOP_FILE=/n/groups/price/martin/data_GDREG/gene_annotation/3dgenome_loops/Dixon_2015.H1-TRO.hg19.peakachu-merged.loops
+# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/Dixon_2015_H1_TRO
+# python get_pannot_s5_loop.py --pgen_file $PGEN_FILE --loop_file $LOOP_FILE --out_path $OUT_PATH
+sbatch -p short -t 0-1:00 -n 1 -c 1 --mem=32000 --open-mode=truncate -o $OUT_PATH/chr${CHROM}.sbatch.log --wrap " \
+python get_pannot_s5_loop.py --pgen_file $PGEN_FILE --loop_file $LOOP_FILE --out_path $OUT_PATH"
+done

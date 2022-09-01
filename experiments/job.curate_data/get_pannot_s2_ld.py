@@ -12,11 +12,15 @@ def main(args):
     SNP_RANGE_FILE = "/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/ukb_imp_v3.snp_range.txt"
 
     PGEN_FILE = args.pgen_file
+    LB = args.lb
+    UB = args.ub
     LD_FILE = args.ld_file
     OUT_PATH = args.out_path
 
     print("ldp5_proxy_10000 .pannot_hr.gz")
     print("--pgen_file %s" % PGEN_FILE)
+    print("--lb %s" % LB)
+    print("--ub %s" % UB)
     print("--ld_file %s" % LD_FILE)
     print("--out_path %s" % OUT_PATH)
 
@@ -43,10 +47,10 @@ def main(args):
             for j in range(i+1, len(snp_list)):
                 ld = v_ld[j]
                 dist = dic_bp[snp_list[j]] - dic_bp[snp_list[i]] 
-                if (ld>=0.5) & (dist<=1e4):
+                if (ld>=0.5) & (dist>=LB) & (dist<UB):
                     snp_list1.append(snp_list[i])
                     snp_list2.append(snp_list[j])
-                elif dist>1e4:
+                elif dist>=UB:
                     break
                     
             if i%1000 == 0:
@@ -59,7 +63,7 @@ def main(args):
     }
 
     for term1,term2 in [
-        ['common', 'common'], ['common', 'lf'], ['common', 'rare'], ['lf', 'lf'], ['lf', 'rare'], ['rare', 'rare']
+        ['common', 'common'], ['common', 'lf'], ['lf', 'lf'],
     ]:
         temp_snp_list1 = []
         temp_snp_list2 = []
@@ -73,15 +77,17 @@ def main(args):
         snp_pair_list = [(x,y) for x,y in zip(temp_snp_list1, temp_snp_list2)]
         if len(snp_pair_list) > 10:
             gdreg.util.write_pannot_mat(
-                snp_pair_list, list(df_snp_chr["SNP"]), OUT_PATH + "/ldp5_proxy_10000_%s_%s.chr%d" % (term1, term2, CHR)
+                snp_pair_list, list(df_snp_chr["SNP"]), OUT_PATH + "/ldp5_proxy_%d_%d_%s_%s.chr%d" % (LB, UB, term1, term2, CHR)
             )
-        print('pAN:ldp5_proxy_10000_%s_%s' % (term1, term2), 'size=%d'% len(temp_snp_list1)) 
+        print('pAN:ldp5_proxy_%d_%d_%s_%s' % (LB, UB, term1, term2), 'size=%d'% len(temp_snp_list1)) 
 
     print('# Finished, time=%0.1fs'%(time.time() - sys_start_time))
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='gdreg')
     parser.add_argument('--pgen_file', type=str, default=None)
+    parser.add_argument('--lb', type=int, default=None)
+    parser.add_argument('--ub', type=int, default=None)
     parser.add_argument('--ld_file', type=str, default=None)
     parser.add_argument('--out_path', type=str, default=None)
     
