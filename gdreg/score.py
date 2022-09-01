@@ -140,34 +140,61 @@ def compute_ld(
     return mat_ld
 
 
-def summarize_pannot(
+def compute_avgr(
     dic_pannot_path,
     dic_ld_path,
     verbose=False,
 ):
     """
-    Summarize pannot based on LD information.
+    Compute average LD for SNP-pair annotations.
 
     Parameters
-    ----------  
+    ----------
     dic_pannot_path : dic of dic of strs
         File path for SNP-pair annotation. dic_pannot_path[annot_name][CHR] contains the
         `.pannot_mat.npz` file path for annotation pAN and and CHR `CHR`. Dimension of the
         sparse matrix should match `dic_data[CHR][pvar]`.
     dic_ld_path : dic of dic of strs
-        File path for LD matrices of shape (n_snp_ref, n_snp_tar), in csc format. SNP-pair annotation. dic_pannot_path[annot_name][CHR] contains the
-        `.pannot_mat.npz` file path for annotation pAN and and CHR `CHR`. Dimension of the
+        File path for LD matrices of shape (n_snp_ref, n_snp_tar), in csc format.
+        dic_ld_path[CHR] contains the list of LD files for CHR `CHR`. Dimension of the
         sparse matrix should match `dic_data[CHR][pvar]`.
-
-    pos_tar,pos_ref : list of int
-        Genomic range of SNPs of format [CHR, ind_start, ind_end].
 
     Returns
     -------
-    mat_ld : np.array(dtype=np.float32)
-        LD matrix of shape (n_snp_ref, n_snp_tar).
+    dic_avgr : dic, default={}
+        dic_avgr[pAN] contains the average LD across all pairs in pAN.
     """
-    pass  
+    start_time = time.time()
+    np.random.seed(0)
+    
+    pAN_list = list(dic_pannot_path)
+    dic_sumr = {x: 0 for x in pAN_list}
+    dic_n = {x: 0 for x in pAN_list}
+
+    for CHR in dic_ld_path:
+        if verbose: 
+            print("CHR%2d (%d LD files)" % (CHR, len(dic_ld_path[CHR])))
+        dic_mat_G_chr = {}
+        for pAN in pAN_list:
+            dic_mat_G_chr[pAN] = gdreg.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
+        
+        for i,ld_file in enumerate(dic_ld_path[CHR]):
+            if np.random.rand(1)[0]>0.2:
+                continue
+            mat_ld, dic_range = gdreg.util.read_ld(ld_file)
+            mat_ld.data[np.isnan(mat_ld.data)] = 0
+            for pAN in pAN_list:
+                temp_mat_G = dic_mat_G_chr[pAN][
+                    dic_range["start"] : dic_range["end"], :
+                ].T
+                dic_sumr[pAN] += temp_mat_G.multiply(mat_ld).sum()
+                dic_n[pAN] += temp_mat_G.sum()            
+            if verbose:
+                print("    LD file %d/%d, time=%0.1fs" % (i, len(dic_ld_path[CHR]), time.time() - start_time))
+    dic_avgr = {x: dic_sumr[x] / dic_n[x] for x in pAN_list}
+    if verbose:
+        print("    Completed, time=%0.1fs" % (time.time() - start_time))
+    return dic_avgr
 
 
 def compute_score(
