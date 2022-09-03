@@ -1,7 +1,7 @@
 #!/bin/bash
 
 PGEN_FILE=/n/groups/price/martin/data_GDREG/toy_10K/chr@_v1.SPB.hg19.toy_10K
-ANNOT_FILE=/n/groups/price/martin/data_GDREG/toy_10K/toy.chr@.annot.gz,/n/groups/price/martin/data_GDREG/toy_10K/toy.gene.chr@.pannot_mat.npz,/n/groups/price/martin/data_GDREG/toy_10K/toy.proxy.chr@.pannot_mat.npz
+ANNOT_FILE=/n/groups/price/martin/data_GDREG/toy_10K/annot_path.txt
 
 # for i_line in {3..180}
 for i_line in 1
@@ -10,7 +10,7 @@ TRAIT=$( head -n $i_line "/n/groups/price/martin/data_GDREG/toy_10K/trait_simu_d
 SCORE_FILE=/n/groups/price/martin/data_GDREG/toy_10K/gdreg_file_score.lazy.perchr/toy_10K.c@_score.tsv.gz
 AVGR_FILE=/n/groups/price/martin/data_GDREG/toy_10K/pannot.avgr
 SUMSTATS_FILE=/n/groups/price/martin/data_GDREG/toy_10K/trait_simu_debug/${TRAIT}.sumstats.gz
-PREFIX_OUT=/n/groups/price/martin/data_GDREG/toy_10K/gdreg_res_simu_debug.081822/${TRAIT}
+PREFIX_OUT=/n/groups/price/martin/data_GDREG/toy_10K/gdreg_res_simu_debug.081822/${TRAIT}.debug
 
 python3 /home/jz286/WES_analysis/GDReg/run_gdreg.py\
     --job regress\
