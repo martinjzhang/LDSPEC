@@ -14,7 +14,7 @@ import gdreg
 Job description
 ----------------
 
-get_snp_block : generate SNP blocks based on sample size and memory
+get_snp_block : generate SNP blocks (10,000 SNPs per line)
     - Input : --job | --pgen_file | --prefix_out
     - Output : list of snp ranges (in the format of "snp_range")
 
@@ -23,12 +23,11 @@ compute_ld : compute LD matrix.
     - Output : LD matrix between a set of SNPs and all other SNPs on the same chromosome.
     
 compute_score : compute LD and DLD scores.
-    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--random_seed] 
-    | [--flag_cross_term]
+    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--flag_cross_term]
     - Output : LD and DLD scores.
     
 compute_avgr : compute average LD (avgr) for each pannot. "--ld_file" should contain all LD files
-    - Input : --job | --pgen_file | --prefix_out | --annot_file | --ld_file | [--random_seed]
+    - Input : --job | --pgen_file | --prefix_out | --annot_file | --ld_file
     - Output : Avg. LD for each pannot.
     
 regress : infer parameters \tau and \rho.
@@ -82,7 +81,9 @@ def main(args):
     if JOB in ["regress"]:
         assert SUMSTATS_FILE is not None, "--sumstats_file required for --job=%s" % JOB
     if JOB in ["compute_score", "compute_avgr", "regress"]:
-        assert ANNOT_FILE is not None, "--annot_file required for --job=%s" % JOB
+        assert ANNOT_FILE is not None, (
+            "--annot_path_file required for --job=%s" % JOB
+        )
     if JOB in ["compute_ld"]:
         assert SNP_RANGE is not None, "--snp_range required for --job=%s" % JOB
         DIC_RANGE = gdreg.util.parse_snp_range(SNP_RANGE)
@@ -188,8 +189,26 @@ def main(args):
         print("# Loading --annot_file")
         dic_annot_path = {}
         dic_pannot_path = {}
+        
+        annot_file_list = []
+        CHR0 = list(dic_data)[0]
+        if ANNOT_FILE.endswith(".txt"):
+            with open(ANNOT_FILE, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if os.path.exists(line.replace("@", "%d" % CHR0)):
+                        annot_file_list.append(line)
+                    else:
+                        print("    Skip: %s" % line)
+        else:
+            for line in ANNOT_FILE.split(','):
+                line = line.strip()
+                if os.path.exists(line.replace("@", "%d" % CHR0)):
+                    annot_file_list.append(line)
+                else:
+                    print("    Skip: %s" % line)            
 
-        for annot_file in ANNOT_FILE.split(","):
+        for annot_file in annot_file_list:
             annot_file = annot_file.strip()
             if annot_file.endswith((".annot.gz", ".pannot_mat.npz")) is False:
                 print("    Skip: %s" % annot_file)
@@ -266,7 +285,13 @@ def main(args):
                 fpath = fpath.strip()
                 if os.path.exists(fpath):
                     temp_df = pd.read_csv(fpath, sep="\t", header=None)
-                    dic_avgr.update({x: y for x, y in zip(temp_df[0], temp_df[1]) if x in dic_pannot_path})
+                    dic_avgr.update(
+                        {
+                            x: y
+                            for x, y in zip(temp_df[0], temp_df[1])
+                            if x in dic_pannot_path
+                        }
+                    )
                 else:
                     print("    Skip: %s" % fpath)
             print(
@@ -334,18 +359,31 @@ def main(args):
             AN_list.extend([x for x in temp_df if x.startswith("AN:")])
         pAN_list = list(dic_pannot_path)
 
-        temp_list = list(set(AN_list_score) - set(AN_list))
-        err_msg = "%d scores without annots: %s" % (
-            len(temp_list),
-            ",".join(temp_list),
-        )
-        assert len(temp_list) == 0, err_msg
-        temp_list = list(set(pAN_list_score) - set(pAN_list))
-        err_msg = "%d scores without pannots: %s" % (
-            len(temp_list),
-            ",".join(temp_list),
-        )
-        assert len(temp_list) == 0, err_msg
+        #         temp_list = list(set(AN_list_score) - set(AN_list))
+        #         err_msg = "%d scores without annots: %s" % (
+        #             len(temp_list),
+        #             ",".join(temp_list),
+        #         )
+        #         assert len(temp_list) == 0, err_msg
+        #         temp_list = list(set(pAN_list_score) - set(pAN_list))
+        #         err_msg = "%d scores without pannots: %s" % (
+        #             len(temp_list),
+        #             ",".join(temp_list),
+        #         )
+        #         assert len(temp_list) == 0, err_msg
+
+        drop_list_LD = ["LD:%s" % x for x in set(AN_list_score) - set(AN_list)]
+        drop_list_DLD = ["DLD:%s" % x for x in set(pAN_list_score) - set(pAN_list)]
+        if len(drop_list_LD) > 0:
+            print(
+                "    Drop %d LD scores without annots: %s"
+                % (len(drop_list_LD), ",".join(drop_list_LD))
+            )
+        if len(drop_list_DLD) > 0:
+            print(
+                "    Drop %d DLD scores without pannots: %s"
+                % (len(drop_list_DLD), ",".join(drop_list_DLD))
+            )
 
         # Finally, load all score files
         df_score = None
@@ -369,6 +407,7 @@ def main(args):
             del temp_df
 
         df_score = df_score.loc[df_score.isna().sum(axis=1) == 0].copy()
+        df_score.drop(columns=drop_list_LD + drop_list_DLD, inplace=True)
         df_score.sort_values(["CHR", "BP"], inplace=True)
         df_score.index = df_score["SNP"]
         n_snp = df_score.shape[0]
@@ -531,9 +570,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ld_file", type=str, required=False, default=None, help=".<range>_ld.npz"
     )
-    parser.add_argument(
-        "--annot_file", type=str, required=False, default=None, help="Contain all SNPs"
-    )
+    #     parser.add_argument(
+    #         "--annot_file", type=str, required=False, default=None, help="Contain all SNPs"
+    #     )
+    parser.add_argument("--annot_file", type=str, required=False, default=None, help="Comma-separated file paths or .txt file with one line per file path.")
     parser.add_argument("--score_file", type=str, required=False, default=None)
     parser.add_argument("--sumstats_file", type=str, required=False, default=None)
     parser.add_argument("--avgr_file", type=str, required=False, default=None)
