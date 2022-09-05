@@ -10,9 +10,9 @@
 #SBATCH --mail-type=NONE#SBATCH --mail-type=NONE
 
 INPUT_PATH=/n/groups/price/UKBiobank/WES_50K
-OUT_PATH=/n/groups/price/martin/WES_analysis/toy_1K
-ID_LIST=/n/groups/price/martin/WES_analysis/toy_1K/ID10K_unrelated.txt
-SNP_LIST=/n/groups/price/martin/WES_analysis/toy_1K/SNP50K_CHR1t10_MAFg5_noMHC.txt
+OUT_PATH=/n/groups/price/martin/WES_analysis/toy_10K
+ID_LIST=/n/groups/price/martin/WES_analysis/toy_10K/ID10K_unrelated.txt
+SNP_LIST=/n/groups/price/martin/WES_analysis/toy_10K/SNP50K_CHR1t10_MAFg5_noMHC.txt
 
 
 for CHROM in {1..10}
@@ -29,13 +29,13 @@ plink2 \
     --hwe 1e-50\
     --maj-ref \
     --make-pgen \
-    --out ${OUT_PATH}/chr${CHROM}_v1.SPB.hg19.toy_1K\
-    && rm ${OUT_PATH}/chr${CHROM}_v1.SPB.hg19.toy_1K.log
+    --out ${OUT_PATH}/chr${CHROM}_v1.SPB.hg19.toy_10K\
+    && rm ${OUT_PATH}/chr${CHROM}_v1.SPB.hg19.toy_10K.log
     
 # Recompute the frq info
 plink2 \
-    --pfile ${OUT_PATH}/chr${CHROM}_v1.SPB.hg19.toy_1K\
+    --pfile ${OUT_PATH}/chr${CHROM}_v1.SPB.hg19.toy_10K\
     --freq \
-    --out ${OUT_PATH}/chr${CHROM}_v1.SPB.hg19.toy_1K\
-    && rm ${OUT_PATH}/chr${CHROM}_v1.SPB.hg19.toy_1K.log
+    --out ${OUT_PATH}/chr${CHROM}_v1.SPB.hg19.toy_10K\
+    && rm ${OUT_PATH}/chr${CHROM}_v1.SPB.hg19.toy_10K.log
 done
