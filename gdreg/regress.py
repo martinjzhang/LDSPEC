@@ -73,7 +73,7 @@ def estimate(
 
     # Annotations
     CHR_list = sorted(dic_data)  # CHR_list contains all CHRs
-    n_jn_block = min(n_jn_block, len(CHR_list) * 10)  # <20 JN blocks for each CHR
+    n_jn_block = min(n_jn_block, len(CHR_list) * 10)  # <=10 JN blocks for each CHR
     for annot_name in dic_annot_path:
         err_msg = "%s does not contain all CHRs in dic_data" % annot_name
         assert set(dic_annot_path[annot_name]) == set(CHR_list), err_msg
