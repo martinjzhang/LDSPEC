@@ -237,7 +237,7 @@ def summarize(
     res_pAN_list = [
         x.replace("DLD:", "") for x in dic_res["term"] if x.startswith("DLD:")
     ]
-    res_prox_list = [x for x in res_pAN_list if "prox" in x]  # pAN's for priximity
+#     res_prox_list = [x for x in res_pAN_list if "prox" in x]  # pAN's for priximity
     err_msg = "df_annot does not contain all annots in dic_res"
     assert len(set(res_AN_list) - set(AN_list)) == 0, err_msg
     err_msg = "dic_pannot_mat does not contain all pannots in dic_res"
@@ -284,11 +284,11 @@ def summarize(
             "h2p_enrich_p": np.nan,
         },
     )
-    for prox in res_prox_list:
-        df_sum_tau["cov|%s" % prox] = np.nan
-        df_sum_tau["cov_se|%s" % prox] = np.nan
-        df_sum_tau["cor|%s" % prox] = np.nan
-        df_sum_tau["cor_se|%s" % prox] = np.nan
+#     for prox in res_prox_list:
+#         df_sum_tau["cov|%s" % prox] = np.nan
+#         df_sum_tau["cov_se|%s" % prox] = np.nan
+#         df_sum_tau["cor|%s" % prox] = np.nan
+#         df_sum_tau["cor_se|%s" % prox] = np.nan
 
     df_sum_rho = pd.DataFrame(
         index=res_pAN_list,
@@ -325,17 +325,17 @@ def summarize(
     dic_pAN_var = {x: 0 for x in res_pAN_list}  # Total sqrt(var_i var_j)
     dic_pAN_var_block = {x: [0] * dic_res["v_h"].shape[0] for x in res_pAN_list}
 
-    dic_prox_v = {
-        x: {y: np.zeros(len(res_pAN_list), dtype=np.float32) for y in res_prox_list}
-        for x in res_AN_list
-    }  # cov(AN; prox) coefficients
-    dic_prox_var = {
-        x: {y: 0 for y in res_prox_list} for x in res_AN_list
-    }  # Total sqrt(var_i var_j)
-    dic_prox_var_block = {
-        x: {y: [0] * dic_res["v_h"].shape[0] for y in res_prox_list}
-        for x in res_AN_list
-    }
+#     dic_prox_v = {
+#         x: {y: np.zeros(len(res_pAN_list), dtype=np.float32) for y in res_prox_list}
+#         for x in res_AN_list
+#     }  # cov(AN; prox) coefficients
+#     dic_prox_var = {
+#         x: {y: 0 for y in res_prox_list} for x in res_AN_list
+#     }  # Total sqrt(var_i var_j)
+#     dic_prox_var_block = {
+#         x: {y: [0] * dic_res["v_h"].shape[0] for y in res_prox_list}
+#         for x in res_AN_list
+#     }
 
     for CHR in CHR_list:
         # df_annot_chr
@@ -429,25 +429,25 @@ def summarize(
                     dic_mat_G_chr[pAN].dot(ind_ref).T.dot(ind_ref)
                 )
 
-        # Update annot * pannot info for cov(AN;pAN) and cor(AN;pAN)
-        for AN in res_AN_list:
-            for prox in res_prox_list:
-                temp_list = [
-                    dic_mat_G_chr[prox]
-                    .multiply(dic_mat_G_chr[x])
-                    .dot(df_annot_chr[AN].values)
-                    .T.dot(df_annot_chr[AN].values)
-                    for x in res_pAN_list
-                ]
-                dic_prox_v[AN][prox] += np.array(temp_list, dtype=np.float32)
+#         # Update annot * pannot info for cov(AN;pAN) and cor(AN;pAN)
+#         for AN in res_AN_list:
+#             for prox in res_prox_list:
+#                 temp_list = [
+#                     dic_mat_G_chr[prox]
+#                     .multiply(dic_mat_G_chr[x])
+#                     .dot(df_annot_chr[AN].values)
+#                     .T.dot(df_annot_chr[AN].values)
+#                     for x in res_pAN_list
+#                 ]
+#                 dic_prox_v[AN][prox] += np.array(temp_list, dtype=np.float32)
 
-                temp_v = df_annot_chr[AN].values * v_h2ps
-                dic_prox_var[AN][prox] += dic_mat_G_chr[prox].dot(temp_v).T.dot(temp_v)
-                for i in range(n_jn_block):
-                    temp_v = df_annot_chr[AN].values * mat_h2ps_block[i, :]
-                    dic_prox_var_block[AN][prox][i] += (
-                        dic_mat_G_chr[prox].dot(temp_v).T.dot(temp_v)
-                    )
+#                 temp_v = df_annot_chr[AN].values * v_h2ps
+#                 dic_prox_var[AN][prox] += dic_mat_G_chr[prox].dot(temp_v).T.dot(temp_v)
+#                 for i in range(n_jn_block):
+#                     temp_v = df_annot_chr[AN].values * mat_h2ps_block[i, :]
+#                     dic_prox_var_block[AN][prox][i] += (
+#                         dic_mat_G_chr[prox].dot(temp_v).T.dot(temp_v)
+#                     )
 
     # Summary : n_snp,type,n_pair
     df_sum_tau["n_snp"] = [dic_AN_n_snp[x] for x in res_AN_list]
@@ -532,32 +532,32 @@ def summarize(
                 dif_ / se_, option="one-sided"
             )
 
-    # Summary : cov(AN;prox), cor(AN;prox)
-    v_coef = np.array([dic_coef[x] for x in res_pAN_list], dtype=np.float32)
-    v_coef_jn = np.array([dic_coef_jn[x] for x in res_pAN_list], dtype=np.float32)
-    mat_cov = df_coef_cov.loc[res_pAN_list, res_pAN_list].values
-    for AN in res_AN_list:
-        if dic_AN_type[AN] != "binary":
-            continue
-        for prox in res_prox_list:
-            temp_v = dic_prox_v[AN][prox]
-            # cov, cov_se
-            df_sum_tau.loc[AN, "cov|%s" % prox] = (temp_v * v_coef_jn).sum()
-            df_sum_tau.loc[AN, "cov_se|%s" % prox] = np.sqrt(
-                temp_v.dot(mat_cov).dot(temp_v)
-            )
+#     # Summary : cov(AN;prox), cor(AN;prox)
+#     v_coef = np.array([dic_coef[x] for x in res_pAN_list], dtype=np.float32)
+#     v_coef_jn = np.array([dic_coef_jn[x] for x in res_pAN_list], dtype=np.float32)
+#     mat_cov = df_coef_cov.loc[res_pAN_list, res_pAN_list].values
+#     for AN in res_AN_list:
+#         if dic_AN_type[AN] != "binary":
+#             continue
+#         for prox in res_prox_list:
+#             temp_v = dic_prox_v[AN][prox]
+#             # cov, cov_se
+#             df_sum_tau.loc[AN, "cov|%s" % prox] = (temp_v * v_coef_jn).sum()
+#             df_sum_tau.loc[AN, "cov_se|%s" % prox] = np.sqrt(
+#                 temp_v.dot(mat_cov).dot(temp_v)
+#             )
 
-            # cor, cor_se via JN
-            v_esti = [(temp_v * v_coef).sum() / dic_prox_var[AN][prox]]
-            mat_esti_jn = []
-            for i in range(n_jn_block):
-                v_coef_block = df_coef_block.loc[i, res_pAN_list].values
-                mat_esti_jn.append(
-                    (temp_v * v_coef_block).sum() / dic_prox_var_block[AN][prox][i]
-                )
-            v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res["v_h"])
-            df_sum_tau.loc[AN, "cor|%s" % prox] = v_mean_jn[0]
-            df_sum_tau.loc[AN, "cor_se|%s" % prox] = np.sqrt(mat_cov_jn[0, 0])
+#             # cor, cor_se via JN
+#             v_esti = [(temp_v * v_coef).sum() / dic_prox_var[AN][prox]]
+#             mat_esti_jn = []
+#             for i in range(n_jn_block):
+#                 v_coef_block = df_coef_block.loc[i, res_pAN_list].values
+#                 mat_esti_jn.append(
+#                     (temp_v * v_coef_block).sum() / dic_prox_var_block[AN][prox][i]
+#                 )
+#             v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res["v_h"])
+#             df_sum_tau.loc[AN, "cor|%s" % prox] = v_mean_jn[0]
+#             df_sum_tau.loc[AN, "cor_se|%s" % prox] = np.sqrt(mat_cov_jn[0, 0])
 
     # Summary : cov, cov_se, cor, cor_se
     v_coef = np.array([dic_coef[x] for x in res_pAN_list], dtype=np.float32)
