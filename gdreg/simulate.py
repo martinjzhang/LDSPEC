@@ -246,7 +246,8 @@ def summarize_snp_effect(
     AN_list = [x for x in dic_coef if x.startswith("AN:")]
     pAN_list = [x for x in dic_coef if x.startswith("pAN:")]
     dic_eff = {x: y for x, y in zip(df_effect["SNP"], df_effect["EFF"])}
-    prox_list = [x for x in dic_pannot_path if "prox" in x]  # pAN's for priximity
+#     prox_list = [x for x in dic_pannot_path if "prox" in x]  # pAN's for priximity
+    prox_list = [x for x in pAN_list if "prox" in x]  # pAN's for priximity
 
     if verbose:
         print("# Call: gdreg.simulate.summarize_snp_effect")
@@ -370,7 +371,8 @@ def summarize_snp_effect(
             df_sum_rho.loc[pAN, "cor"] += (
                 dic_mat_G_chr[pAN].dot(v_h2ps_chr).T.dot(v_h2ps_chr)
             )
-
+        
+        for pAN in pAN_list:
             for prox in prox_list:
                 dic_overlap[pAN][prox] += (
                     dic_mat_G_chr[pAN].multiply(dic_mat_G_chr[prox]).sum()

@@ -100,6 +100,7 @@ def estimate(
     n_sample_zsq = df_sumstats["N"].mean().astype(int)
     dic_zsc = {x: y for x, y in zip(df_sumstats["SNP"], df_sumstats["Z"])}
     outlier_thres = max(80, 0.001 * n_sample_zsq)  # Finucane 2015 Nat Genet
+#     outlier_thres = 1e8
     dic_zsc = {x: y for x, y in dic_zsc.items() if y ** 2 < outlier_thres}
 
     if verbose:
@@ -674,12 +675,14 @@ def regress(
     # 1. LD weights (clipped at max=10)
     #    - Z_i^2 : 1 / l_i, where l_i = \sum_j r_ij^2
     #    - Z_i Z_j : 1 / l_ij, where l_ij = \sum_k r_ik r_jk
-    temp_list = [
-        #         x for x in df_reg if x.startswith("LD:AN:all") | x.startswith("LD:AN:ALL")
-        x
-        for x in df_reg
-        if x.startswith("LD:AN:all_") | x.startswith("LD:AN:mbin")
-    ]
+    if "LD:AN:all" in df_reg:
+        temp_list = ["LD:AN:all"]
+    else:
+        temp_list = [
+            x
+            for x in df_reg
+            if x.startswith("LD:AN:all_") | x.startswith("LD:AN:mbin")
+        ]
     v_ld = df_reg[temp_list].sum(axis=1).values.clip(min=0.1)
     if verbose:
         print(
