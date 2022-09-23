@@ -247,6 +247,7 @@ def summarize_snp_effect(
     pAN_list = [x for x in dic_coef if x.startswith("pAN:")]
     dic_eff = {x: y for x, y in zip(df_effect["SNP"], df_effect["EFF"])}
 #     prox_list = [x for x in dic_pannot_path if "prox" in x]  # pAN's for priximity
+    prox_list = [x for x in pAN_list if "prox" in x]  # pAN's for priximity
 
     if verbose:
         print("# Call: gdreg.simulate.summarize_snp_effect")
@@ -258,7 +259,7 @@ def summarize_snp_effect(
             "    pannots: %s"
             % ", ".join(["%s (%0.2f)" % (x, dic_coef[x]) for x in pAN_list])
         )
-#         print("    prox: %s" % ", ".join(prox_list))
+        print("    prox: %s" % ", ".join(prox_list))
 
     # Summary
     df_sum_tau = pd.DataFrame(
@@ -272,9 +273,6 @@ def summarize_snp_effect(
             "h2_enrich": np.nan,
         },
     )
-#     for prox in prox_list:
-#         df_sum_tau["cov|%s" % prox] = 0
-#         df_sum_tau["cor|%s" % prox] = 0
 
     df_sum_rho = pd.DataFrame(
         index=pAN_list,
@@ -285,8 +283,11 @@ def summarize_snp_effect(
             "rho": np.nan,
             "cov": 0,
             "cor": 0,
+            "ecov": 0,
+            "ecor": 0,
         },
     )
+
     # Summary : single-SNP annotations
     df_list = []
     for CHR in CHR_list:
@@ -345,6 +346,7 @@ def summarize_snp_effect(
 
     # Summary : SNP-pair annotations
     df_list = []
+    dic_overlap = {x: {y: 0 for y in prox_list} for x in pAN_list}
     for CHR in CHR_list:
         df_snp_chr = dic_data[CHR]["pvar"].copy()
         n_snp_chr = df_snp_chr.shape[0]
@@ -369,6 +371,12 @@ def summarize_snp_effect(
             df_sum_rho.loc[pAN, "cor"] += (
                 dic_mat_G_chr[pAN].dot(v_h2ps_chr).T.dot(v_h2ps_chr)
             )
+        
+        for pAN in pAN_list:
+            for prox in prox_list:
+                dic_overlap[pAN][prox] += (
+                    dic_mat_G_chr[pAN].multiply(dic_mat_G_chr[prox]).sum()
+                )
 
         n_block_chr = int(np.ceil(n_snp_chr / block_size))
         block_size_chr = int(np.ceil(n_snp_chr / n_block_chr))
@@ -397,34 +405,14 @@ def summarize_snp_effect(
     df_reg = pd.concat(df_list, axis=0)
     df_sum_rho["rho"] = gdreg.util.reg(df_reg["beta_ij"], df_reg[pAN_list])
     df_sum_rho["p_causal"] = df_sum_rho["p_causal"] / df_sum_rho["n_pair"]
-    df_sum_rho["cor"] = df_sum_rho["cov"] / df_sum_rho["cor"]
-
-#     # Summary : cov(AN;prox) and cor(AN; prox)
-#     for CHR in CHR_list:
-#         v_snp_chr = dic_data[CHR]["pvar"]["SNP"].values
-#         v_h2ps_chr = np.array([dic_h2ps[x] for x in v_snp_chr], dtype=np.float32)
-#         v_eff_chr = np.array([dic_eff[x] for x in v_snp_chr], dtype=np.float32)
-#         for prox in prox_list:
-#             mat_G = gdreg.util.read_pannot_mat(dic_pannot_path[prox][CHR])
-#             for AN in AN_list:
-#                 temp_dic = {x: y for x, y in zip(df_snp["SNP"], df_snp[AN])}
-#                 v_annot_chr = np.array(
-#                     [temp_dic[x] for x in v_snp_chr], dtype=np.float32
-#                 )
-
-#                 v_eff_annot = v_eff_chr * v_annot_chr
-#                 v_h2ps_annot = v_h2ps_chr * v_annot_chr
-#                 df_sum_tau.loc[AN, "cov|%s" % prox] += mat_G.dot(v_eff_annot).T.dot(
-#                     v_eff_annot
-#                 )
-#                 df_sum_tau.loc[AN, "cor|%s" % prox] += mat_G.dot(v_h2ps_annot).T.dot(
-#                     v_h2ps_annot
-#                 )
-
-#     for prox in prox_list:
-#         df_sum_tau["cor|%s" % prox] = (
-#             df_sum_tau["cov|%s" % prox] / df_sum_tau["cor|%s" % prox]
-#         )
+    df_sum_rho["ecov"] = df_sum_rho["cov"]
+    for pAN in pAN_list:
+        for prox in prox_list:
+            temp_r = dic_overlap[pAN][prox] / df_sum_rho.loc[prox, "n_pair"]
+            df_sum_rho.loc[pAN, "ecov"] -= temp_r * df_sum_rho.loc[prox, "cov"]
+    temp_v = df_sum_rho["cor"].values.copy()
+    df_sum_rho["cor"] = df_sum_rho["cov"] / temp_v
+    df_sum_rho["ecor"] = df_sum_rho["ecov"] / temp_v
 
     if verbose:
         print(df_sum_tau)

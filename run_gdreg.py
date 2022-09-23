@@ -314,6 +314,7 @@ def main(args):
         # CHR_list_score containing all score files
         CHR_list_score = set(dic_data)
         for score_file in SCORE_FILE.split(","):
+            score_file = score_file.strip()
             temp_list = []
             for CHR in CHR_list_score:
                 if os.path.exists(score_file.replace("@", "%d" % CHR)):

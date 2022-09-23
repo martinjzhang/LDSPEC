@@ -45,8 +45,7 @@ def main(args):
         "rare" : set(df_snp_chr["SNP"][df_snp_chr["MAF"].values <= 0.005]),
     }
 
-    for term1,term2 in [['common', 'common'], ['common', 'lf'], ['common', 'rare'], 
-                 ['lf', 'lf'], ['lf', 'rare'], ['rare', 'rare']]:
+    for term1,term2 in [['common', 'common'], ['common', 'lf'], ['lf', 'lf']]:
         temp_snp_list1 = []
         temp_snp_list2 = []
         for snp1,snp2 in zip(snp_list1, snp_list2):
@@ -60,19 +59,6 @@ def main(args):
         gdreg.util.write_pannot_mat(
             snp_pair_list, list(df_snp_chr["SNP"]), OUT_PATH + "/proxy_%d_%d_%s_%s.chr%d" % (LB, UB, term1, term2, CHR)
         )
-        print('pAN:gene_%s_%s' % (term1, term2), 'size=%d'% len(temp_snp_list1)) 
-
-#         df_pannot = pd.DataFrame(data={
-#             'CHR' : CHR,
-#             'SNP' : temp_snp_list1,
-#             'BP' : [dic_bp[x] for x in temp_snp_list1],
-#             'pCHR' : CHR,
-#             'pSNP' : temp_snp_list2,
-#             'pBP' : [dic_bp[x] for x in temp_snp_list2],
-#             'pAN:proxy_%d_%d_%s_%s' % (LB, UB, term1, term2) : 1
-#         })
-
-#         gdreg.util.write_annot(df_pannot, OUT_PATH + "/proxy_%d_%d_%s_%s.chr%d.pannot_hr.gz" % (LB, UB, term1, term2, CHR))
         print("proxy_%d_%d_%s_%s.pannot.gz" % (LB, UB, term1, term2), 'size=%d'% len(temp_snp_list1)) 
     
     print('# Finished, time=%0.1fs'%(time.time() - sys_start_time))
