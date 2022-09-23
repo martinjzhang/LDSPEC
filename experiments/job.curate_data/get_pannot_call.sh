@@ -80,15 +80,17 @@
 # sbatch -p short -t 0-00:30 -n 1 -c 1 --mem=16000 --open-mode=truncate -o $OUT_PATH/cS2G_other.chr${CHROM}.sbatch.log --wrap "python get_pannot_s3_cS2G.py --pgen_file $PGEN_FILE --pannot cS2G_other --out_path $OUT_PATH"
 # done
 
-# # Proxy
-# for CHROM in {1..22}
-# # for CHROM in 21
-# do
-# PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3
-# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot_proxy_1000_10000
-# sbatch -p short -t 0-01:00 -n 1 -c 1 --mem=8000 --open-mode=truncate -o $OUT_PATH.proxy.sbatch.log --wrap " \
-# python pannot_s2_proxy.py --pgen_file $PGEN_FILE --lb 1000 --ub 10000 --out_path $OUT_PATH"
-# done
+# Proxy
+for CHROM in {1..22}
+# for CHROM in 22
+do
+PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3
+# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/proxy_0_1000
+OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/proxy_0_10000
+# python get_pannot_s1_proxy.py --pgen_file $PGEN_FILE --lb 0 --ub 1000 --out_path $OUT_PATH
+sbatch -p short -t 0-01:00 -n 1 -c 1 --mem=8000 --open-mode=truncate -o $OUT_PATH.proxy.sbatch.log --wrap " \
+python get_pannot_s1_proxy.py --pgen_file $PGEN_FILE --lb 0 --ub 10000 --out_path $OUT_PATH"
+done
 
 # # ldp5_proxy
 # for CHROM in {1..21}
@@ -124,18 +126,18 @@
 # python get_pannot_s5_loop.py --pgen_file $PGEN_FILE --loop_file $LOOP_FILE --out_path $OUT_PATH"
 # done
 
-# Baseline
-for CHROM in {1..22}
-# for CHROM in 22
-do
-PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3
-ANNOT_FILE=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/baseline_annot/baseline_165annots_chr${CHROM}.annot.gz
-OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/baseline_0_100
-OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/baseline_100_1000
-OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/baseline_1000_10000
-OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/baseline_0_1000
-OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/baseline_0_10000
-# python get_pannot_s6_baseline.py --pgen_file $PGEN_FILE --annot_file $ANNOT_FILE --lb 0 --ub 100 --out_path $OUT_PATH
-sbatch -p short -t 0-03:00 -n 1 -c 1 --mem=32000 --open-mode=truncate -o $OUT_PATH/chr${CHROM}.sbatch.log --wrap " \
-python get_pannot_s6_baseline.py --pgen_file $PGEN_FILE --annot_file $ANNOT_FILE --lb 0 --ub 10000 --out_path $OUT_PATH"
-done
+# # Baseline
+# for CHROM in {1..22}
+# # for CHROM in 22
+# do
+# PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3
+# ANNOT_FILE=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/baseline_annot/baseline_165annots_chr${CHROM}.annot.gz
+# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/baseline_0_100
+# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/baseline_100_1000
+# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/baseline_1000_10000
+# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/baseline_0_1000
+# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/baseline_0_10000
+# # python get_pannot_s6_baseline.py --pgen_file $PGEN_FILE --annot_file $ANNOT_FILE --lb 0 --ub 100 --out_path $OUT_PATH
+# sbatch -p short -t 0-03:00 -n 1 -c 1 --mem=32000 --open-mode=truncate -o $OUT_PATH/chr${CHROM}.sbatch.log --wrap " \
+# python get_pannot_s6_baseline.py --pgen_file $PGEN_FILE --annot_file $ANNOT_FILE --lb 0 --ub 10000 --out_path $OUT_PATH"
+# done
