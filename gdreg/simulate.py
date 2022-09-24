@@ -125,6 +125,7 @@ def simulate_snp_effect(
         # Per-SNP variance
         for AN in AN_list:
             df_effect_chr["VAR"] += df_effect_chr[AN] * dic_coef[AN]
+        df_effect_chr["VAR"] = df_effect_chr["VAR"].clip(lower=0)
 
         if p_causal != 1:
             ind_select = np.random.binomial(1, 1 - p_causal, size=n_snp_chr) == 1
@@ -152,6 +153,7 @@ def simulate_snp_effect(
             for pAN in pAN_list:
                 temp_mat_G = dic_mat_G_chr[pAN][ind_block, :].toarray()[:, ind_block]
                 mat_cov += temp_mat_G * dic_coef[pAN]
+            mat_cov = mat_cov.clip(-1, 1)
 
             # Scale by variance
             v_sd_block = df_effect_chr["VAR"].values[ind_block]
@@ -159,9 +161,16 @@ def simulate_snp_effect(
             mat_cov = (mat_cov * v_sd_block).T * v_sd_block
 
             # Sample effects
-            df_effect_chr.loc[ind_block, "EFF"] = gdreg.util.sample_mvn(
-                mat_cov, random_seed=random_seed + i + 500 * CHR
+#             df_effect_chr.loc[ind_block, "EFF"] = gdreg.util.sample_mvn(
+#                 mat_cov, random_seed=random_seed + i + 500 * CHR
+#             )
+            ind_select = np.diag(mat_cov)>0
+            temp_v = np.zeros(mat_cov.shape[0], dtype=np.float32)
+            temp_v[ind_select] = gdreg.util.sample_mvn(
+                mat_cov[ind_select, :][:, ind_select], random_seed=random_seed + i + 500 * CHR
             )
+            df_effect_chr.loc[ind_block, "EFF"] = temp_v
+    
             if i % 25 == 0:
                 print(
                     "    CHR%2d block %2d/%2d, time=%0.1fs"
@@ -188,7 +197,8 @@ def summarize_snp_effect(
     dic_data,
     dic_coef,
     df_effect,
-    df_phen,
+#     df_phen,
+    df_phen=None,
     dic_annot_path={},
     dic_pannot_path={},
     block_size=1000,
@@ -325,18 +335,21 @@ def summarize_snp_effect(
     df_sum_tau["p_causal"] = [
         (df_snp.loc[df_snp[x] == 1, "EFF"] != 0).mean() for x in AN_list
     ]
-
-    h2_common = df_phen["AN:all_common"].var() / df_phen["TRAIT"].var()
-    h2_common_ps = h2_common / (df_snp["AN:all_common"] == 1).sum()
-    h2_lf = df_phen["AN:all_lf"].var() / df_phen["TRAIT"].var()
-    h2_lf_ps = h2_lf / (df_snp["AN:all_lf"] == 1).sum()
-    for AN in AN_list:
-        df_sum_tau.loc[AN, "h2"] = df_phen[AN].var() / df_phen["TRAIT"].var()
-        h2ps = df_sum_tau.loc[AN, "h2"] / df_sum_tau.loc[AN, "n_snp"]
-        if AN.endswith("_common"):
-            df_sum_tau.loc[AN, "h2_enrich"] = h2ps / h2_common_ps
-        if AN.endswith("_lf"):
-            df_sum_tau.loc[AN, "h2_enrich"] = h2ps / h2_lf_ps
+    
+    if df_phen is not None:
+        h2_common = df_phen["AN:all_common"].var() / df_phen["TRAIT"].var()
+        h2_common_ps = h2_common / (df_snp["AN:all_common"] == 1).sum()
+        h2_lf = df_phen["AN:all_lf"].var() / df_phen["TRAIT"].var()
+        h2_lf_ps = h2_lf / (df_snp["AN:all_lf"] == 1).sum()
+        for AN in AN_list:
+            df_sum_tau.loc[AN, "h2"] = df_phen[AN].var() / df_phen["TRAIT"].var()
+            h2ps = df_sum_tau.loc[AN, "h2"] / df_sum_tau.loc[AN, "n_snp"]
+            if AN.endswith("_common"):
+                df_sum_tau.loc[AN, "h2_enrich"] = h2ps / h2_common_ps
+            if AN.endswith("_lf"):
+                df_sum_tau.loc[AN, "h2_enrich"] = h2ps / h2_lf_ps
+    else:
+        df_sum_tau["h2_enrich"] = 0
 
     v_h2ps = np.zeros(df_snp.shape[0], dtype=np.float32)
     for AN in AN_list:
