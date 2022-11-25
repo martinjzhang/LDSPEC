@@ -14,6 +14,7 @@ def estimate(
     dic_pannot_path={},
     dic_avgr={},
     flag_cross_term=False,
+    flag_nofil_snp=False,
     n_jn_block=100,
     verbose=False,
 ):
@@ -45,6 +46,8 @@ def estimate(
     flag_cross_term : bool, default=False
         If True, also use cross terms (Z_i Z_j) for regression, for SNP pairs i,j within
         10000 SNPs and covered by at least one pannot.
+    flag_nofil_snp : bool, default=False
+        If True, turning off outlier filter.
     n_jn_block : int, default=100
         Number of JN blocks.
 
@@ -98,9 +101,10 @@ def estimate(
 
     # df_sumstats
     n_sample_zsq = df_sumstats["N"].mean().astype(int)
-    dic_zsc = {x: y for x, y in zip(df_sumstats["SNP"], df_sumstats["Z"])}
+    dic_zsc = {x: y for x, y in zip(df_sumstats["SNP"], df_sumstats["Z"])}    
     outlier_thres = max(80, 0.001 * n_sample_zsq)  # Finucane 2015 Nat Genet
-#     outlier_thres = 1e8
+    if flag_nofil_snp:
+        outlier_thres = 1e8
     dic_zsc = {x: y for x, y in dic_zsc.items() if y ** 2 < outlier_thres}
 
     if verbose:

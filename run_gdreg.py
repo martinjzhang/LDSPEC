@@ -60,6 +60,7 @@ def main(args):
     SNP_RANGE = args.snp_range
     FLAG_FULL_LD = args.flag_full_ld
     FLAG_CROSS_TERM = args.flag_cross_term
+    FLAG_NOFIL_SNP = args.flag_nofil_snp
 
     # Parse and check arguments
     LEGAL_JOB_LIST = [
@@ -101,7 +102,8 @@ def main(args):
     header += "--prefix_out %s\\\n" % PREFIX_OUT
     header += "--snp_range %s\\\n" % SNP_RANGE
     header += "--flag_full_ld %s\\\n" % FLAG_FULL_LD
-    header += "--flag_cross_term %s\n" % FLAG_CROSS_TERM
+    header += "--flag_cross_term %s\\\n" % FLAG_CROSS_TERM
+    header += "--flag_nofil_snp %s\n" % FLAG_NOFIL_SNP
     print(header)
 
     ###########################################################################################
@@ -549,6 +551,7 @@ def main(args):
             dic_pannot_path=dic_pannot_path,
             dic_avgr=dic_avgr,
             flag_cross_term=FLAG_CROSS_TERM,
+            flag_nofil_snp=FLAG_NOFIL_SNP,
             n_jn_block=100,
             verbose=True,
         )
@@ -571,9 +574,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ld_file", type=str, required=False, default=None, help=".<range>_ld.npz"
     )
-    #     parser.add_argument(
-    #         "--annot_file", type=str, required=False, default=None, help="Contain all SNPs"
-    #     )
     parser.add_argument("--annot_file", type=str, required=False, default=None, help="Comma-separated file paths or .txt file with one line per file path.")
     parser.add_argument("--score_file", type=str, required=False, default=None)
     parser.add_argument("--sumstats_file", type=str, required=False, default=None)
@@ -587,6 +587,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--flag_full_ld", type=bool, default=False)
     parser.add_argument("--flag_cross_term", type=bool, default=False)
+    parser.add_argument("--flag_nofil_snp", type=bool, default=False)
 
     args = parser.parse_args()
     main(args)
