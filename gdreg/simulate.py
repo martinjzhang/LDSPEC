@@ -125,11 +125,13 @@ def simulate_snp_effect(
         # Per-SNP variance
         for AN in AN_list:
             df_effect_chr["VAR"] += df_effect_chr[AN] * dic_coef[AN]
+        if verbose:
+            print("    CHR%d, VAR_min=%0.2e, %d/%d negative" % (CHR, df_effect_chr["VAR"].min(), (df_effect_chr["VAR"]<0).sum(), df_effect_chr.shape[0]))
         df_effect_chr["VAR"] = df_effect_chr["VAR"].clip(lower=0)
 
-        if p_causal != 1:
-            ind_select = np.random.binomial(1, 1 - p_causal, size=n_snp_chr) == 1
-            df_effect_chr.loc[ind_select, "VAR"] = 0
+#         if p_causal != 1:
+#             ind_select = np.random.binomial(1, 1 - p_causal, size=n_snp_chr) == 1
+#             df_effect_chr.loc[ind_select, "VAR"] = 0
 
         if alpha != -1:
             v_maf = df_effect_chr["MAF"].values
@@ -144,6 +146,15 @@ def simulate_snp_effect(
         n_block_chr = int(np.ceil(n_snp_chr / block_size))
         block_size_chr = int(np.ceil(n_snp_chr / n_block_chr))
         for i in range(n_block_chr):
+            if i % 25 == 0:
+                print(
+                    "    CHR%2d block %2d/%2d, time=%0.1fs"
+                    % (CHR, i, n_block_chr, time.time() - start_time)
+                )
+                # Block-wise sparsity
+            if np.random.rand(1)[0]>p_causal:
+                continue
+                
             ind_block = np.zeros(n_snp_chr, dtype=bool)
             ind_block[i * block_size_chr : (i + 1) * block_size_chr] = True
             n_snp_block = ind_block.sum()
@@ -170,12 +181,6 @@ def simulate_snp_effect(
                 mat_cov[ind_select, :][:, ind_select], random_seed=random_seed + i + 500 * CHR
             )
             df_effect_chr.loc[ind_block, "EFF"] = temp_v
-    
-            if i % 25 == 0:
-                print(
-                    "    CHR%2d block %2d/%2d, time=%0.1fs"
-                    % (CHR, i, n_block_chr, time.time() - start_time)
-                )
 
         df_list.append(df_effect_chr)
 

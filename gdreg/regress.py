@@ -16,6 +16,7 @@ def estimate(
     flag_cross_term=False,
     flag_nofil_snp=False,
     n_jn_block=100,
+    null_model=None,
     verbose=False,
 ):
     """
@@ -148,16 +149,20 @@ def estimate(
         temp_df_reg,
         dic_block,
         n_sample_zsq,
+        null_model=null_model,
         verbose=verbose,
         verbose_prefix="    ",
     )
-    dic_res["summary"] = summarize(
-        dic_res,
-        dic_data,
-        dic_annot_path=dic_annot_path,
-        dic_pannot_path=dic_pannot_path,
-        dic_avgr=dic_avgr,
-    )
+    
+    # Summary only in the estimation mode
+    if null_model is None:
+        dic_res["summary"] = summarize(
+            dic_res,
+            dic_data,
+            dic_annot_path=dic_annot_path,
+            dic_pannot_path=dic_pannot_path,
+            dic_avgr=dic_avgr,
+        )
 
     if verbose:
         print("    Completed, time=%0.1fs" % (time.time() - start_time))
@@ -626,6 +631,7 @@ def regress(
     df_reg,
     dic_block,
     n_sample_zsq,
+    null_model=None,
     verbose=False,
     verbose_prefix="",
 ):
@@ -734,6 +740,73 @@ def regress(
         "coef_block": dic_jn["coef_block"],
         "v_h": dic_jn["v_h"],
     }
+    
+    # Model evaluation
+    dic_eval = {}
+    if null_model is not None:
+        if verbose:
+            print(verbose_prefix + "    Eval against null: %s" % ", ".join(null_model))
+
+        # Observed statistics: loglss, mse, mae     
+        mat_X = df_reg[reg_list].values.astype(np.float32)
+        mat_X[:, :-1] *= n_sample_zsq
+        v_y = df_reg["ZSQ"].values.astype(np.float32)
+        if verbose:
+            print(
+                verbose_prefix + "    Chi2: %d zeros, imputed as %0.2e" % 
+                ((v_y==0).sum(), v_y[v_y>0].min())
+            )
+        v_y[v_y==0] = v_y[v_y>0].min()
+        v_y_hat = np.dot(mat_X, dic_res_reg["coef"])
+        temp_v = sp.stats.gamma.logpdf(v_y, a=0.5, scale=2*v_y_hat.clip(min=0.1))
+        dic_eval["loglss"] = (temp_v / v_ld).sum()
+        dic_eval["sqe"] = ((v_y - v_y_hat)**2 / v_ld ).sum()
+        dic_eval["abe"] = (np.absolute(v_y - v_y_hat) / v_ld).sum()
+        
+        # Null loglss
+        n_rep = 20
+        dic_eval["loglss.null"] = np.zeros(n_rep, dtype=np.float32)
+        dic_eval["sqe.null"] = np.zeros(n_rep, dtype=np.float32)
+        dic_eval["abe.null"] = np.zeros(n_rep, dtype=np.float32)
+        for i_rep in range(n_rep):
+            np.random.seed(i_rep)
+            mat_X = df_reg[reg_list].values.astype(np.float32)
+            mat_X[:, :-1] *= n_sample_zsq
+            v_y = df_reg["ZSQ"].values.astype(np.float32)
+            for i_reg,reg in enumerate(reg_list):
+                if reg not in null_model:
+                    mat_X[:, i_reg] = np.random.permutation(mat_X[:, i_reg])
+
+            mat_X = (mat_X.T * v_w).T
+            v_y = v_y * v_w
+            dic_jn = reg_bjn(v_y, mat_X, dic_block)
+            
+            mat_X = df_reg[reg_list].values.astype(np.float32)
+            mat_X[:, :-1] *= n_sample_zsq
+            v_y = df_reg["ZSQ"].values.astype(np.float32)
+            v_y[v_y==0] = v_y[v_y>0].min()
+            v_y_hat = np.dot(mat_X, dic_jn["coef"])
+            temp_v = sp.stats.gamma.logpdf(v_y, a=0.5, scale=2*v_y_hat.clip(min=0.1))
+            dic_eval["loglss.null"][i_rep] = (temp_v / v_ld).sum()
+            dic_eval["sqe.null"][i_rep] = ((v_y - v_y_hat)**2 / v_ld ).sum()
+            dic_eval["abe.null"][i_rep] = (np.absolute(v_y - v_y_hat) / v_ld).sum()
+        
+        for term in ["loglss", "sqe", "abe"]:
+            dic_eval["%s.dif" % term] = dic_eval[term] - dic_eval["%s.null" % term].mean()
+            dic_eval["%s.null_se" % term] = dic_eval["%s.null" % term].std()
+            dic_eval["%s.dif_z" % term] = dic_eval["%s.dif" % term]  / dic_eval["%s.null_se" % term]
+            dic_eval["%s.dif_p" % term] = gdreg.util.zsc2pval(
+                dic_eval["%s.dif_z" % term], option="two-sided"
+            )
+            
+            if verbose:
+                print(verbose_prefix + "    %s=%0.3e, dif=%0.2f, null_se=%0.2f, z=%0.2f, p=%0.2e" % (
+                    term, dic_eval[term], dic_eval["%s.dif" % term],
+                    dic_eval["%s.null_se" % term], 
+                    dic_eval["%s.dif_z" % term], 
+                    dic_eval["%s.dif_p" % term],  
+                ))
+        dic_res_reg["eval"] = dic_eval
 
     if verbose:
         print(

@@ -56,6 +56,7 @@ def main(args):
     SCORE_FILE = args.score_file
     SUMSTATS_FILE = args.sumstats_file
     AVGR_FILE = args.avgr_file
+    NULL_MODEL_FILE = args.null_model_file
     PREFIX_OUT = args.prefix_out
     SNP_RANGE = args.snp_range
     FLAG_FULL_LD = args.flag_full_ld
@@ -69,25 +70,30 @@ def main(args):
         "compute_score",
         "compute_avgr",
         "regress",
+        "evaluate",
     ]
     err_msg = "# run_gdreg: --job=%s not supported" % JOB
     assert JOB in LEGAL_JOB_LIST, err_msg
 
-    if JOB in ["get_snp_block", "compute_ld", "compute_score", "regress"]:
+    if JOB in ["get_snp_block", "compute_ld", "compute_score", "regress", "evaluate"]:
         assert PGEN_FILE is not None, "--pgen_file required for --job=%s" % JOB
     if JOB in ["compute_score", "compute_avgr"]:
         assert LD_FILE is not None, "--ld_file required for --job=%s" % JOB
-    if JOB in ["regress"]:
+    if JOB in ["regress", "evaluate"]:
         assert SCORE_FILE is not None, "--score_file required for --job=%s" % JOB
-    if JOB in ["regress"]:
+    if JOB in ["regress", "evaluate"]:
         assert SUMSTATS_FILE is not None, "--sumstats_file required for --job=%s" % JOB
-    if JOB in ["compute_score", "compute_avgr", "regress"]:
+    if JOB in ["compute_score", "compute_avgr", "regress", "evaluate"]:
         assert ANNOT_FILE is not None, (
             "--annot_path_file required for --job=%s" % JOB
         )
     if JOB in ["compute_ld"]:
         assert SNP_RANGE is not None, "--snp_range required for --job=%s" % JOB
         DIC_RANGE = gdreg.util.parse_snp_range(SNP_RANGE)
+    if JOB in ["evaluate"]:
+        assert NULL_MODEL_FILE is not None, (
+            "--null_model_file required for --job=%s" % JOB
+        )
 
     # Print input options
     header = gdreg.util.get_cli_head()
@@ -99,6 +105,7 @@ def main(args):
     header += "--score_file %s\\\n" % SCORE_FILE
     header += "--sumstats_file %s\\\n" % SUMSTATS_FILE
     header += "--avgr_file %s\\\n" % AVGR_FILE
+    header += "--null_model_file %s\\\n" % NULL_MODEL_FILE
     header += "--prefix_out %s\\\n" % PREFIX_OUT
     header += "--snp_range %s\\\n" % SNP_RANGE
     header += "--flag_full_ld %s\\\n" % FLAG_FULL_LD
@@ -116,6 +123,7 @@ def main(args):
         "compute_score",
         "compute_avgr",
         "regress",
+        "evaluate",
     ]:
         print("# Loading --pgen_file")
         dic_data = {}
@@ -180,14 +188,14 @@ def main(args):
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
     # Load --sumstats_file
-    if JOB in ["regress"]:
+    if JOB in ["regress", "evaluate"]:
         print("# Loading --sumstats_file")
         df_sumstats = pd.read_csv(SUMSTATS_FILE, sep="\t", index_col=None)
         print("    .sumstats.gz loaded, %d SNPs" % df_sumstats.shape[0])
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
     # Load --annot_file (lazy loading)
-    if JOB in ["compute_score", "compute_avgr", "regress"]:
+    if JOB in ["compute_score", "compute_avgr", "regress", "evaluate"]:
         print("# Loading --annot_file")
         dic_annot_path = {}
         dic_pannot_path = {}
@@ -279,7 +287,7 @@ def main(args):
             )
 
     # Load --avgr_file
-    if JOB in ["regress"]:
+    if JOB in ["regress", "evaluate"]:
         print("# Loading --avgr_file")
         if AVGR_FILE is not None:
             dic_avgr = {}
@@ -311,7 +319,7 @@ def main(args):
             print("    %s: %0.4f" % (pAN, dic_avgr[pAN]))
 
     # Load --score_file
-    if JOB in ["regress"]:
+    if JOB in ["regress", "evaluate"]:
         print("# Loading --score_file")
         # CHR_list_score containing all score files
         CHR_list_score = set(dic_data)
@@ -418,6 +426,13 @@ def main(args):
         n_DLD = len([x for x in df_score if x.startswith("DLD:")])
         print("    Loaded: %d SNPs, %d LD scores, %d DLD scores" % (n_snp, n_LD, n_DLD))
         print("    " + gdreg.util.get_sys_info(sys_start_time))
+        
+    # Load --null_model_file
+    if JOB in ["evaluate"]:
+        print("# Loading --null_model_file")
+        null_model = list(pd.read_csv(NULL_MODEL_FILE, header=None)[0])
+        null_model = [x for x in null_model if x in df_score]
+        print("    Null model (%d): %s" % (len(null_model), ",".join(null_model)))
 
     ###########################################################################################
     ######                                  Computation                                  ######
@@ -565,7 +580,29 @@ def main(args):
 
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
+    if JOB == "evaluate":
+        print("# Running --job evaluate")
 
+        dic_res = gdreg.regress.estimate(
+            dic_data,
+            df_score,
+            df_sumstats,
+            dic_annot_path=dic_annot_path,
+            dic_pannot_path=dic_pannot_path,
+            dic_avgr=dic_avgr,
+            null_model=null_model,
+            flag_cross_term=FLAG_CROSS_TERM,
+            flag_nofil_snp=FLAG_NOFIL_SNP,
+            n_jn_block=100,
+            verbose=True,
+        )
+        
+        dbfile = open(PREFIX_OUT + ".pickle", "wb")
+        pickle.dump(dic_res, dbfile)
+        dbfile.close()
+
+        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="gdreg")
 
@@ -578,6 +615,7 @@ if __name__ == "__main__":
     parser.add_argument("--score_file", type=str, required=False, default=None)
     parser.add_argument("--sumstats_file", type=str, required=False, default=None)
     parser.add_argument("--avgr_file", type=str, required=False, default=None)
+    parser.add_argument("--null_model_file", type=str, required=False, default=None)
     parser.add_argument("--prefix_out", type=str, required=True)
     parser.add_argument(
         "--snp_range",
