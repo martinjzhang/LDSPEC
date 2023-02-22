@@ -14,7 +14,8 @@ def simulate_snp_effect(
     h2g=0.5,
     alpha=-0.38,
     p_causal=0.2,
-    block_size=1000,
+    block_size=100,
+    flag_bw_sparse=False,
     random_seed=0,
     verbose=False,
 ):
@@ -57,8 +58,11 @@ def simulate_snp_effect(
         is no maf-dependency. Schoech et al. NC 2019 suggestsed alpha=-0.38.
     p_causal : float, default=0.2
         Proportion of causal SNPs.
-    block_size : int, default=1000
+    block_size : int, default=100
         Maximum number of SNPs to simulate at a time.
+    flag_bw_sparse : bool, default=False
+        If True, each block (with size `block_size`) is either all causal
+        (with probability `p_causal`) or all non-causal
 
     Returns
     -------
@@ -88,6 +92,7 @@ def simulate_snp_effect(
     if verbose:
         print("# Call: gdreg.simulate.simulate_snp_effect")
         print("    h2g=%0.2f, alpha=%0.2f, p_causal=%0.2f" % (h2g, alpha, p_causal))
+        print("    block_size=%d, flag_bw_sparse=%s" % (block_size, flag_bw_sparse))
         print(
             "    annots: %s"
             % ", ".join(["%s (%0.2f)" % (x, dic_coef[x]) for x in AN_list])
@@ -100,7 +105,7 @@ def simulate_snp_effect(
     # Simulate
     df_list = []
     for CHR in CHR_list:
-        # df_effect_chr with 'MAF', 'VAR', 'EFF', and annots
+        # df_effect_chr : 'MAF', 'VAR', 'EFF', annots
         df_effect_chr = dic_data[CHR]["pvar"].copy()
         n_snp_chr = df_effect_chr.shape[0]
         df_effect_chr["MAF"] = dic_data[CHR]["afreq"]["MAF"]
@@ -122,16 +127,25 @@ def simulate_snp_effect(
         for col in ["MAF", "VAR", "EFF"] + AN_list:
             df_effect_chr[col] = df_effect_chr[col].astype(np.float32)
 
-        # Per-SNP variance
+        # Per-SNP variance : df_effect_chr["VAR"]
         for AN in AN_list:
             df_effect_chr["VAR"] += df_effect_chr[AN] * dic_coef[AN]
         if verbose:
-            print("    CHR%d, VAR_min=%0.2e, %d/%d negative" % (CHR, df_effect_chr["VAR"].min(), (df_effect_chr["VAR"]<0).sum(), df_effect_chr.shape[0]))
+            print(
+                "    CHR%d, VAR_min=%0.2e, %d/%d negative"
+                % (
+                    CHR,
+                    df_effect_chr["VAR"].min(),
+                    (df_effect_chr["VAR"] < 0).sum(),
+                    df_effect_chr.shape[0],
+                )
+            )
         df_effect_chr["VAR"] = df_effect_chr["VAR"].clip(lower=0)
 
-#         if p_causal != 1:
-#             ind_select = np.random.binomial(1, 1 - p_causal, size=n_snp_chr) == 1
-#             df_effect_chr.loc[ind_select, "VAR"] = 0
+        # Each SNP has independent probability to be causal
+        if (p_causal != 1) & (flag_bw_sparse is False):
+            ind_select = np.random.binomial(1, p_causal, size=n_snp_chr) == 0
+            df_effect_chr.loc[ind_select, "VAR"] = 0
 
         if alpha != -1:
             v_maf = df_effect_chr["MAF"].values
@@ -146,15 +160,16 @@ def simulate_snp_effect(
         n_block_chr = int(np.ceil(n_snp_chr / block_size))
         block_size_chr = int(np.ceil(n_snp_chr / n_block_chr))
         for i in range(n_block_chr):
-            if i % 25 == 0:
+            if i % 100 == 0:
                 print(
-                    "    CHR%2d block %2d/%2d, time=%0.1fs"
+                    "    CHR%2d block %d/%d, time=%0.1fs"
                     % (CHR, i, n_block_chr, time.time() - start_time)
                 )
-                # Block-wise sparsity
-            if np.random.rand(1)[0]>p_causal:
+
+            # Block-wise sparsity : each block is causal with probability p_causal
+            if flag_bw_sparse & (np.random.rand(1)[0] > p_causal):
                 continue
-                
+
             ind_block = np.zeros(n_snp_chr, dtype=bool)
             ind_block[i * block_size_chr : (i + 1) * block_size_chr] = True
             n_snp_block = ind_block.sum()
@@ -172,14 +187,18 @@ def simulate_snp_effect(
             mat_cov = (mat_cov * v_sd_block).T * v_sd_block
 
             # Sample effects
-#             df_effect_chr.loc[ind_block, "EFF"] = gdreg.util.sample_mvn(
-#                 mat_cov, random_seed=random_seed + i + 500 * CHR
-#             )
-            ind_select = np.diag(mat_cov)>0
-            temp_v = np.zeros(mat_cov.shape[0], dtype=np.float32)
+            # df_effect_chr.loc[ind_block, "EFF"] = gdreg.util.sample_mvn(
+            #     mat_cov, random_seed=random_seed + i + 500 * CHR
+            # )
+            ind_select = np.diag(mat_cov) > 0
+            temp_v = np.zeros(n_snp_block, dtype=np.float32)
             temp_v[ind_select] = gdreg.util.sample_mvn(
-                mat_cov[ind_select, :][:, ind_select], random_seed=random_seed + i + 500 * CHR
+                mat_cov[ind_select, :][:, ind_select]
             )
+            # # Sanity check: only for diagonal elements
+            # ind_select = np.diag(mat_cov)>0
+            # temp_v = np.zeros(n_snp_block, dtype=np.float32)
+            # temp_v[ind_select] = np.sqrt(np.diag(mat_cov)[ind_select]) * np.random.randn(ind_select.shape[0])
             df_effect_chr.loc[ind_block, "EFF"] = temp_v
 
         df_list.append(df_effect_chr)
@@ -192,6 +211,10 @@ def simulate_snp_effect(
 
     if verbose:
         print(
+            "    h2g=%0.3f,  p_causal=%0.3f"
+            % ((df_effect["EFF"] ** 2).sum(), (df_effect["EFF"] != 0).mean())
+        )
+        print(
             "    Completed, %d SNPs simulated, time=%0.1fs"
             % (df_effect.shape[0], time.time() - start_time)
         )
@@ -202,7 +225,7 @@ def summarize_snp_effect(
     dic_data,
     dic_coef,
     df_effect,
-#     df_phen,
+    #     df_phen,
     df_phen=None,
     dic_annot_path={},
     dic_pannot_path={},
@@ -234,6 +257,8 @@ def summarize_snp_effect(
 
     df_effect : pd.DataFrame
         Simulated SNP effects. Must contain ['CHR', 'SNP', 'BP', 'EFF'] columns.
+    df_phen : pd.DataFrame, default=None
+        Simulated phenotypes, with columns ['FID', 'IID', 'TRAIT'].
     dic_annot_path : dic of dic of strs
         File path for single-SNP annotation. dic_annot_path[annot_name][CHR] contains the
         `.annot.gz` file path for annot_file `annot_name` and CHR `CHR`.
@@ -261,7 +286,6 @@ def summarize_snp_effect(
     AN_list = [x for x in dic_coef if x.startswith("AN:")]
     pAN_list = [x for x in dic_coef if x.startswith("pAN:")]
     dic_eff = {x: y for x, y in zip(df_effect["SNP"], df_effect["EFF"])}
-#     prox_list = [x for x in dic_pannot_path if "prox" in x]  # pAN's for priximity
     prox_list = [x for x in pAN_list if "prox" in x]  # pAN's for priximity
 
     if verbose:
@@ -340,7 +364,7 @@ def summarize_snp_effect(
     df_sum_tau["p_causal"] = [
         (df_snp.loc[df_snp[x] == 1, "EFF"] != 0).mean() for x in AN_list
     ]
-    
+
     if df_phen is not None:
         h2_common = df_phen["AN:all_common"].var() / df_phen["TRAIT"].var()
         h2_common_ps = h2_common / (df_snp["AN:all_common"] == 1).sum()
@@ -389,7 +413,7 @@ def summarize_snp_effect(
             df_sum_rho.loc[pAN, "cor"] += (
                 dic_mat_G_chr[pAN].dot(v_h2ps_chr).T.dot(v_h2ps_chr)
             )
-        
+
         for pAN in pAN_list:
             for prox in prox_list:
                 dic_overlap[pAN][prox] += (

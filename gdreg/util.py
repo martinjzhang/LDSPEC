@@ -16,12 +16,13 @@ import time
 ################################################################################
 ################################## Computation #################################
 ################################################################################
-def sample_mvn(mat_cov, random_seed=0, verbose=False):
+def sample_mvn(mat_cov, random_seed=None, verbose=False):
     """
     Generate samples from zero-mean multi-variate Gaussian distribution.
     Only use positive eigenvalues from the covariance matrix.
     """
-    np.random.seed(random_seed)
+    if random_seed is not None:
+        np.random.seed(random_seed)
     mat_cov = np.array(mat_cov)
     v_w, mat_v = np.linalg.eigh(mat_cov)
     ind_select = v_w > 0
@@ -45,7 +46,7 @@ def sample_mvn(mat_cov, random_seed=0, verbose=False):
     mat_v = mat_v[:, ind_select]
     mat_u = mat_v.dot(np.diag(v_w))
     v_mvn = mat_u.dot(np.random.randn(mat_u.shape[1]))
-    v_mvn[np.absolute(v_mvn) < 1e-8] = 0
+    v_mvn = v_mvn.astype(np.float32)
     return v_mvn
 
 
@@ -136,8 +137,8 @@ def zsc2pval(zsc, option="two-sided"):
         return sp.stats.norm.cdf(-zsc)  # This is more accurate
     if option == "two-sided":
         return sp.stats.norm.cdf(-np.absolute(zsc)) * 2
-    
-    
+
+
 def pval2zsc(pval):
     """
     Convert one-sided p-value to z-score. Accurate up to `zsc=36` and `pval=4.2e-284`.

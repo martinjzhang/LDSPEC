@@ -35,6 +35,10 @@ regress : infer parameters \tau and \rho.
     | --prefix_out | [--flag_cross_term]
     - Output : GDREG result.
     
+evaluate : model evaluation 
+    - Input : --job | --pgen_file | --sumstats_file | --annot_file | --avgr_file | --score_file | --null_model_file
+    - Output : model evaluation results.
+    
 TODO
 ----
 - Double check file consistency 
@@ -84,9 +88,7 @@ def main(args):
     if JOB in ["regress", "evaluate"]:
         assert SUMSTATS_FILE is not None, "--sumstats_file required for --job=%s" % JOB
     if JOB in ["compute_score", "compute_avgr", "regress", "evaluate"]:
-        assert ANNOT_FILE is not None, (
-            "--annot_path_file required for --job=%s" % JOB
-        )
+        assert ANNOT_FILE is not None, "--annot_path_file required for --job=%s" % JOB
     if JOB in ["compute_ld"]:
         assert SNP_RANGE is not None, "--snp_range required for --job=%s" % JOB
         DIC_RANGE = gdreg.util.parse_snp_range(SNP_RANGE)
@@ -199,7 +201,7 @@ def main(args):
         print("# Loading --annot_file")
         dic_annot_path = {}
         dic_pannot_path = {}
-        
+
         annot_file_list = []
         CHR0 = list(dic_data)[0]
         if ANNOT_FILE.endswith(".txt"):
@@ -211,12 +213,12 @@ def main(args):
                     else:
                         print("    Skip: %s" % line)
         else:
-            for line in ANNOT_FILE.split(','):
+            for line in ANNOT_FILE.split(","):
                 line = line.strip()
                 if os.path.exists(line.replace("@", "%d" % CHR0)):
                     annot_file_list.append(line)
                 else:
-                    print("    Skip: %s" % line)            
+                    print("    Skip: %s" % line)
 
         for annot_file in annot_file_list:
             annot_file = annot_file.strip()
@@ -426,7 +428,7 @@ def main(args):
         n_DLD = len([x for x in df_score if x.startswith("DLD:")])
         print("    Loaded: %d SNPs, %d LD scores, %d DLD scores" % (n_snp, n_LD, n_DLD))
         print("    " + gdreg.util.get_sys_info(sys_start_time))
-        
+
     # Load --null_model_file
     if JOB in ["evaluate"]:
         print("# Loading --null_model_file")
@@ -596,13 +598,14 @@ def main(args):
             n_jn_block=100,
             verbose=True,
         )
-        
+
         dbfile = open(PREFIX_OUT + ".pickle", "wb")
         pickle.dump(dic_res, dbfile)
         dbfile.close()
 
         print("    " + gdreg.util.get_sys_info(sys_start_time))
-        
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="gdreg")
 
@@ -611,7 +614,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ld_file", type=str, required=False, default=None, help=".<range>_ld.npz"
     )
-    parser.add_argument("--annot_file", type=str, required=False, default=None, help="Comma-separated file paths or .txt file with one line per file path.")
+    parser.add_argument(
+        "--annot_file",
+        type=str,
+        required=False,
+        default=None,
+        help="Comma-separated file paths or .txt file with one line per file path.",
+    )
     parser.add_argument("--score_file", type=str, required=False, default=None)
     parser.add_argument("--sumstats_file", type=str, required=False, default=None)
     parser.add_argument("--avgr_file", type=str, required=False, default=None)
