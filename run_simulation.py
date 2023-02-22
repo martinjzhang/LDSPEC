@@ -26,7 +26,6 @@ compute_sumstats : compute .sumstats file
 TODO
 ----
 - Add truth of "cov(ac;proxy)" and "cor(ac;proxy)"
-- Add job for compute_sumstats only (Need to check)
 - 
 """
 
@@ -42,21 +41,24 @@ def main(args):
     PGEN_FILE = args.pgen_file
     CONFIG_FILE = args.config_file
     ANNOT_FILE = args.annot_file
+    EFF_FILE = args.eff_file
     PHEN_FILE = args.phen_file
     PREFIX_OUT = args.prefix_out
     RANDOM_SEED = int(args.random_seed)
-    
+    FLAG_BW_SPARSE = bool(args.flag_bw_sparse)
+
     # Parse and check arguments
     LEGAL_JOB_LIST = [
         "simulate",
+        "compute_phen",
         "compute_sumstats",
     ]
     err_msg = "# run_gdreg: --job=%s not supported" % JOB
     assert JOB in LEGAL_JOB_LIST, err_msg
 
     if (PHEN_FILE is None) & (JOB in ["compute_sumstats"]):
-        raise ValueError("# run_simulation.py: --phen_file required for --job=%s" % JOB)   
-    
+        raise ValueError("# run_simulation.py: --phen_file required for --job=%s" % JOB)
+
     # Print input options
     header = gdreg.util.get_cli_head()
     header += "Call: run_simulation.py \\\n"
@@ -64,16 +66,18 @@ def main(args):
     header += "--pgen_file %s\\\n" % PGEN_FILE
     header += "--config_file %s\\\n" % CONFIG_FILE
     header += "--annot_file %s\\\n" % ANNOT_FILE
+    header += "--eff_file %s\\\n" % EFF_FILE
     header += "--phen_file %s\\\n" % PHEN_FILE
     header += "--prefix_out %s\\\n" % PREFIX_OUT
-    header += "--random_seed %d\n" % RANDOM_SEED
+    header += "--random_seed %d\\\n" % RANDOM_SEED
+    header += "--flag_bw_sparse %s\n" % FLAG_BW_SPARSE
     print(header)
 
     ###########################################################################################
     ######                                   Data Loading                                ######
     ###########################################################################################
     # Load genotype data
-    if JOB in ["simulate", "compute_sumstats"]:
+    if JOB in ["simulate", "compute_phen", "compute_sumstats"]:
         print("# Loading --pgen_file")
         dic_data = {}
         if "@" not in PGEN_FILE:  # Load single CHR
@@ -82,7 +86,9 @@ def main(args):
         else:
             for CHR in range(1, 23):  # Check all 23 CHRs
                 if os.path.exists(PGEN_FILE.replace("@", "%s" % CHR) + ".pgen"):
-                    dic_data[CHR] = gdreg.util.read_pgen(PGEN_FILE.replace("@", "%s" % CHR))
+                    dic_data[CHR] = gdreg.util.read_pgen(
+                        PGEN_FILE.replace("@", "%s" % CHR)
+                    )
 
         for CHR in dic_data:
             n_sample = dic_data[CHR]["psam"].shape[0]
@@ -96,13 +102,13 @@ def main(args):
                 % (CHR, n_sample, n_snp, sparsity * 100)
             )
         print("    " + gdreg.util.get_sys_info(sys_start_time))
-        
+
     # Load --annot_file (lazy loading)
-    if JOB in ["simulate"]:
+    if JOB in ["simulate", "compute_phen"]:
         print("# Loading --annot_file")
         dic_annot_path = {}
         dic_pannot_path = {}
-        
+
         annot_file_list = []
         CHR0 = list(dic_data)[0]
         if ANNOT_FILE.endswith(".txt"):
@@ -114,12 +120,12 @@ def main(args):
                     else:
                         print("    Skip: %s" % line)
         else:
-            for line in ANNOT_FILE.split(','):
+            for line in ANNOT_FILE.split(","):
                 line = line.strip()
                 if os.path.exists(line.replace("@", "%d" % CHR0)):
                     annot_file_list.append(line)
                 else:
-                    print("    Skip: %s" % line)            
+                    print("    Skip: %s" % line)
 
         for annot_file in annot_file_list:
             annot_file = annot_file.strip()
@@ -190,7 +196,7 @@ def main(args):
             )
 
     # Load config
-    if JOB in ["simulate"]:
+    if JOB in ["simulate", "compute_phen"]:
         print("# Loading --config_file")
         temp_df = pd.read_csv(CONFIG_FILE, sep="\t", header=None)
         dic_config = {x: y for x, y in zip(temp_df[0], temp_df[1])}
@@ -205,14 +211,26 @@ def main(args):
         pAN_list = list(dic_pannot_path)
 
         dic_coef = {
-            x: dic_config[x] for x in dic_config if x not in ["h2g", "p_causal", "alpha"]
+            x: dic_config[x]
+            for x in dic_config
+            if x not in ["h2g", "p_causal", "alpha"]
         }
         for annot in dic_coef:
             if annot not in ["h2g", "p_causal", "alpha"] + AN_list + pAN_list:
                 print("    %s not in --annot_file" % annot)
 
         print("    %s" % ", ".join(["%s (%0.2f)" % (x, dic_coef[x]) for x in dic_coef]))
-    
+
+    # Load EFF_FILE
+    if JOB in ["compute_phen"]:
+        print("# Loading --eff_file")
+        df_effect = pd.read_csv(EFF_FILE, sep="\t", index_col=None)
+        print(
+            "    %d SNPs, h2=%0.3f"
+            % (df_effect.shape[0], (df_effect["EFF"] ** 2).sum())
+        )
+        print("    " + gdreg.util.get_sys_info(sys_start_time))
+
     # Load PHEN_FILE
     if JOB in ["compute_sumstats"]:
         print("# Loading --phen_file")
@@ -234,7 +252,8 @@ def main(args):
             h2g=dic_config["h2g"],
             alpha=dic_config["alpha"],
             p_causal=dic_config["p_causal"],
-            block_size=1000,
+            block_size=100,
+            flag_bw_sparse=FLAG_BW_SPARSE,
             random_seed=RANDOM_SEED,
             verbose=True,
         )
@@ -242,24 +261,27 @@ def main(args):
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
         # Compute .phen
+        df_effect_ = df_effect.copy()
         df_phen = gdreg.simulate.simulate_phen(
             dic_data,
             dic_coef,
-            df_effect,
+            df_effect_,
             dic_annot_path=dic_annot_path,
             block_size=500,
-            random_seed=RANDOM_SEED,
+            random_seed=RANDOM_SEED + 42,
             verbose=True,
         )
         df_phen.to_csv(PREFIX_OUT + ".phen", sep="\t", index=False)
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
         # Summarize SNP effects
+        df_effect_ = df_effect.copy()
+        df_phen_ = df_phen.copy()
         df_sum_tau, df_sum_rho = gdreg.simulate.summarize_snp_effect(
             dic_data,
             dic_coef,
-            df_effect,
-            df_phen,
+            df_effect_,
+            df_phen_,
             dic_annot_path=dic_annot_path,
             dic_pannot_path=dic_pannot_path,
             block_size=1000,
@@ -270,13 +292,26 @@ def main(args):
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
         # Compute .sumstats
+        df_phen_ = df_phen.copy()
         df_sumstats = gdreg.simulate.compute_sumstats(
-            df_phen, dic_data, block_size=500, verbose=True
+            df_phen_, dic_data, block_size=500, verbose=True
         )
         df_sumstats.to_csv(PREFIX_OUT + ".sumstats.gz", sep="\t", index=False)
         print("    " + gdreg.util.get_sys_info(sys_start_time))
-    
-    
+
+    if JOB == "compute_phen":
+        df_phen = gdreg.simulate.simulate_phen(
+            dic_data,
+            dic_coef,
+            df_effect,
+            dic_annot_path=dic_annot_path,
+            block_size=500,
+            random_seed=RANDOM_SEED + 42,
+            verbose=True,
+        )
+        df_phen.to_csv(PREFIX_OUT + ".phen", sep="\t", index=False)
+        print("    " + gdreg.util.get_sys_info(sys_start_time))
+
     if JOB == "compute_sumstats":
         df_sumstats = gdreg.simulate.compute_sumstats(
             df_phen, dic_data, block_size=500, verbose=True
@@ -288,12 +323,14 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="gdreg")
 
-    parser.add_argument("--job", type=str, default='simulate')
+    parser.add_argument("--job", type=str, default="simulate")
     parser.add_argument("--pgen_file", type=str, required=True)
     parser.add_argument("--config_file", type=str, default=None)
     parser.add_argument("--annot_file", type=str, default=None)
+    parser.add_argument("--eff_file", type=str, default=None)
     parser.add_argument("--phen_file", type=str, default=None)
     parser.add_argument("--prefix_out", type=str, required=True)
+    parser.add_argument("--flag_bw_sparse", type=bool, default=False)
     parser.add_argument("--random_seed", type=int, default=0)
 
     args = parser.parse_args()
