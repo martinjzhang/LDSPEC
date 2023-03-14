@@ -57,6 +57,7 @@ def compute_ld(
     block_size_tar = n_snp_tar
     block_size_ref = 1000
     block_size_sample = 16383
+    block_size_sample = 8191 # 32767/4
 
     n_block_tar = np.ceil(n_snp_tar / block_size_tar).astype(int)
     n_block_ref = np.ceil(n_snp_ref / block_size_ref).astype(int)
@@ -128,7 +129,7 @@ def compute_ld(
     mat_ld = mat_ld.astype(np.float32) / n_sample
     v_maf_tar = np.array(v_maf_tar, dtype=np.float32)
     v_maf_ref = np.array(v_maf_ref, dtype=np.float32)
-
+    
     mat_ld = mat_ld - np.outer(2 * v_maf_ref, 2 * v_maf_tar)
     temp_v1 = 1 / np.sqrt(2 * v_maf_ref * (1 - v_maf_ref))
     temp_v2 = 1 / np.sqrt(2 * v_maf_tar * (1 - v_maf_tar))
