@@ -2,9 +2,9 @@
 #SBATCH -c 1
 #SBATCH -N 1
 #SBATCH -t 0-02:00
-#SBATCH --array=2
+#SBATCH --array=1
 #SBATCH -p short
-#SBATCH --mem=196000
+#SBATCH --mem=32000
 #SBATCH -o /home/jz286/WES_analysis/GDReg/job_info/hostname_%j.out  
 #SBATCH -e /home/jz286/WES_analysis/GDReg/job_info/hostname_%j.err 
 #SBATCH --mail-type=NONE#SBATCH --mail-type=NONE
@@ -48,7 +48,7 @@
 # Convert to ancestral alleles (chimp): directly converting to pgen
 # CHROM=$SLURM_ARRAY_TASK_ID
 
-CHROM=2
+CHROM=1
 REF_FILE=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/snp_info/ukb_imp_chr${CHROM}_v3_aa.pvar
 OUTPUT_PATH=/n/scratch3/users/j/jz286/imp_geno_chimp
 # plink2_a37 \

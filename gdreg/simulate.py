@@ -582,8 +582,10 @@ def simulate_phen(
             v_eff = np.array([dic_eff[x] if x in dic_eff else 0 for x in v_snp_block])
 
             mat_X = mat_X.T.astype(np.float32)
-            mat_X[mat_X == -9] = 0
-            v_maf = mat_X.mean(axis=0) * 0.5
+            mat_X[mat_X == -9] = np.nan  # Imputation by mean genotype
+            v_maf = np.nanmean(mat_X, axis=0) * 0.5  # Imputation by mean genotype
+            #             mat_X[mat_X == -9] = 0
+            #             v_maf = mat_X.mean(axis=0) * 0.5
             mat_X = (mat_X - 2 * v_maf) / np.sqrt(2 * v_maf * (1 - v_maf))
             mat_X[np.isnan(mat_X)] = 0
 
@@ -692,8 +694,10 @@ def compute_sumstats(df_phen, dic_data, block_size=500, verbose=False):
 
             mat_X = mat_X[:, ind_sample].copy()
             mat_X = mat_X.T.astype(np.float32)
-            mat_X[mat_X == -9] = 0
-            v_maf = mat_X.mean(axis=0) * 0.5
+            mat_X[mat_X == -9] = np.nan  # Imputation by mean genotype
+            v_maf = np.nanmean(mat_X, axis=0) * 0.5  # Imputation by mean genotype
+            #             mat_X[mat_X == -9] = 0
+            #             v_maf = mat_X.mean(axis=0) * 0.5
             mat_X = (mat_X - 2 * v_maf) / np.sqrt(2 * v_maf * (1 - v_maf))
             mat_X[np.isnan(mat_X)] = 0
 

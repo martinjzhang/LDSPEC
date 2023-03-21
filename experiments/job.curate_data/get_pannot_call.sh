@@ -93,12 +93,11 @@
 # done
 
 # ldp5_proxy
-# for CHROM in {1..21}
-for CHROM in 22
+for CHROM in {1..21}
+# for CHROM in 22
 do
 PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3
 LD_FILE=/n/scratch3/users/j/jz286/imp_geno.gdreg_ld/ukb_imp_v3.@_ld.npz
-# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/pannot_ldp5_proxy_0_100
 OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/ldp5_proxy_0_1000
 # OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/pannot_ldp5_proxy_100_1000
 # OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/pannot_ldp5_proxy_1000_10000
