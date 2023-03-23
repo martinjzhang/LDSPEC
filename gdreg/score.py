@@ -56,8 +56,9 @@ def compute_ld(
     # block_size_tar, block_size_ref, block_size_sample
     block_size_tar = n_snp_tar
     block_size_ref = 1000
-    block_size_sample = 16383
-    block_size_sample = 8191 # 32767/4
+    #     block_size_sample = 16383
+    #     block_size_sample = 8191 # 32767/4
+    block_size_sample = 10000  # 32767/4
 
     n_block_tar = np.ceil(n_snp_tar / block_size_tar).astype(int)
     n_block_ref = np.ceil(n_snp_ref / block_size_ref).astype(int)
@@ -83,7 +84,8 @@ def compute_ld(
     reader_ref = pg.PgenReader(bytes(dic_data[CHR_ref]["pgen"], encoding="utf8"))
 
     # Compute LD matrix
-    mat_ld = np.zeros([n_snp_ref, n_snp_tar], dtype=int)
+    #     mat_ld = np.zeros([n_snp_ref, n_snp_tar], dtype=int)
+    mat_ld = np.zeros([n_snp_ref, n_snp_tar], dtype=float)
     v_maf_tar, v_maf_ref = [], []
 
     for i_tar in range(n_block_tar):
@@ -91,32 +93,53 @@ def compute_ld(
         end_tar = min(ind_s_tar + (i_tar + 1) * block_size_tar, ind_e_tar)
         mat_X_tar = np.empty([end_tar - start_tar, n_sample], np.int8)
         reader_tar.read_range(start_tar, end_tar, mat_X_tar)
-        mat_X_tar[mat_X_tar == -9] = 0
-        v_maf_tar.extend(mat_X_tar.mean(axis=1) * 0.5)  # np.float64
+        #         mat_X_tar[mat_X_tar == -9] = 0
+        #         v_maf_tar.extend(mat_X_tar.mean(axis=1) * 0.5)  # np.float64
+        v_missing = (mat_X_tar == -9).sum(axis=1)  # Imputation by mean genotype
+        v_maf_tar_block = (
+            0.5 * (mat_X_tar.sum(axis=1) + 9 * v_missing) / (n_sample - v_missing)
+        )
+        v_maf_tar.extend(v_maf_tar_block)  # np.float64
 
         mat_list_tar = []
         for i_sample in range(n_block_sample):
             ind_s = i_sample * block_size_sample
             ind_e = (i_sample + 1) * block_size_sample
-            mat_list_tar.append(
-                sp.sparse.csr_matrix(mat_X_tar[:, ind_s:ind_e].T, dtype=np.int16)
+            #             mat_list_tar.append(
+            #                 sp.sparse.csr_matrix(mat_X_tar[:, ind_s:ind_e].T, dtype=np.int16)
+            #             )
+            temp_mat = sp.sparse.csr_matrix(
+                mat_X_tar[:, ind_s:ind_e].T, dtype=np.float32
             )
+            temp_ind = temp_mat == -9
+            temp_mat += 9 * temp_ind + temp_ind.multiply(v_maf_tar_block * 2)
+            mat_list_tar.append(temp_mat)
 
         for i_ref in range(n_block_ref):
             start_ref = ind_s_ref + i_ref * block_size_ref
             end_ref = min(ind_s_ref + (i_ref + 1) * block_size_ref, ind_e_ref)
             mat_X_ref = np.empty([end_ref - start_ref, n_sample], np.int8)
             reader_ref.read_range(start_ref, end_ref, mat_X_ref)
-            mat_X_ref[mat_X_ref == -9] = 0
+            #             mat_X_ref[mat_X_ref == -9] = 0
+            v_missing = (mat_X_ref == -9).sum(axis=1)  # Imputation by mean genotype
+            v_maf_ref_block = (
+                0.5 * (mat_X_ref.sum(axis=1) + 9 * v_missing) / (n_sample - v_missing)
+            )
             if i_tar == 0:
-                v_maf_ref.extend(mat_X_ref.mean(axis=1) * 0.5)  # np.float64
+                #                 v_maf_ref.extend(mat_X_ref.mean(axis=1) * 0.5)  # np.float64
+                v_maf_ref.extend(v_maf_ref_block)  # np.float64
 
             for i_sample in range(n_block_sample):
                 ind_s = i_sample * block_size_sample
                 ind_e = (i_sample + 1) * block_size_sample
+                #                 temp_mat = sp.sparse.csr_matrix(
+                #                     mat_X_ref[:, ind_s:ind_e].T, dtype=np.int16
+                #                 )
                 temp_mat = sp.sparse.csr_matrix(
-                    mat_X_ref[:, ind_s:ind_e].T, dtype=np.int16
+                    mat_X_ref[:, ind_s:ind_e].T, dtype=np.float32
                 )
+                temp_ind = temp_mat == -9
+                temp_mat += 9 * temp_ind + temp_ind.multiply(v_maf_ref_block * 2)
                 mat_ld[
                     start_ref - ind_s_ref : end_ref - ind_s_ref,
                     start_tar - ind_s_tar : end_tar - ind_s_tar,
@@ -129,7 +152,7 @@ def compute_ld(
     mat_ld = mat_ld.astype(np.float32) / n_sample
     v_maf_tar = np.array(v_maf_tar, dtype=np.float32)
     v_maf_ref = np.array(v_maf_ref, dtype=np.float32)
-    
+
     mat_ld = mat_ld - np.outer(2 * v_maf_ref, 2 * v_maf_tar)
     temp_v1 = 1 / np.sqrt(2 * v_maf_ref * (1 - v_maf_ref))
     temp_v2 = 1 / np.sqrt(2 * v_maf_tar * (1 - v_maf_tar))
@@ -167,20 +190,20 @@ def compute_avgr(
     """
     start_time = time.time()
     np.random.seed(0)
-    
+
     pAN_list = list(dic_pannot_path)
     dic_sumr = {x: 0 for x in pAN_list}
     dic_n = {x: 0 for x in pAN_list}
 
     for CHR in dic_ld_path:
-        if verbose: 
+        if verbose:
             print("CHR%2d (%d LD files)" % (CHR, len(dic_ld_path[CHR])))
         dic_mat_G_chr = {}
         for pAN in pAN_list:
             dic_mat_G_chr[pAN] = gdreg.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
-        
-        for i,ld_file in enumerate(dic_ld_path[CHR]):
-            if np.random.rand(1)[0]>0.2:
+
+        for i, ld_file in enumerate(dic_ld_path[CHR]):
+            if np.random.rand(1)[0] > 0.2:
                 continue
             mat_ld, dic_range = gdreg.util.read_ld(ld_file)
             mat_ld.data[np.isnan(mat_ld.data)] = 0
@@ -189,9 +212,12 @@ def compute_avgr(
                     dic_range["start"] : dic_range["end"], :
                 ].T
                 dic_sumr[pAN] += temp_mat_G.multiply(mat_ld).sum()
-                dic_n[pAN] += temp_mat_G.sum()            
+                dic_n[pAN] += temp_mat_G.sum()
             if verbose:
-                print("    LD file %d/%d, time=%0.1fs" % (i, len(dic_ld_path[CHR]), time.time() - start_time))
+                print(
+                    "    LD file %d/%d, time=%0.1fs"
+                    % (i, len(dic_ld_path[CHR]), time.time() - start_time)
+                )
     dic_avgr = {x: dic_sumr[x] / dic_n[x] for x in pAN_list}
     if verbose:
         print("    Completed, time=%0.1fs" % (time.time() - start_time))

@@ -63,6 +63,7 @@ def main(args):
     NULL_MODEL_FILE = args.null_model_file
     PREFIX_OUT = args.prefix_out
     SNP_RANGE = args.snp_range
+    WIN_SIZE = int(float(args.win_size))
     FLAG_FULL_LD = args.flag_full_ld
     FLAG_CROSS_TERM = args.flag_cross_term
     FLAG_NOFIL_SNP = args.flag_nofil_snp
@@ -110,6 +111,7 @@ def main(args):
     header += "--null_model_file %s\\\n" % NULL_MODEL_FILE
     header += "--prefix_out %s\\\n" % PREFIX_OUT
     header += "--snp_range %s\\\n" % SNP_RANGE
+    header += "--win_size %s\\\n" % WIN_SIZE
     header += "--flag_full_ld %s\\\n" % FLAG_FULL_LD
     header += "--flag_cross_term %s\\\n" % FLAG_CROSS_TERM
     header += "--flag_nofil_snp %s\n" % FLAG_NOFIL_SNP
@@ -481,10 +483,16 @@ def main(args):
                 )
                 ind_s = START + i_block * block_size
                 ind_e = min(START + (i_block + 1) * block_size, END)
-                ind_s_ref = np.searchsorted(v_bp, v_bp[ind_s] - 5.01e6, side="left")
+                #                 ind_s_ref = np.searchsorted(v_bp, v_bp[ind_s] - 5.01e6, side="left")
+                ind_s_ref = np.searchsorted(
+                    v_bp, v_bp[ind_s] - 0.501 * WIN_SIZE, side="left"
+                )
                 ind_s_ref = max(0, ind_s_ref - 1)
+                #                 ind_e_ref = np.searchsorted(
+                #                     v_bp, v_bp[ind_e - 1] + 5.01e6, side="right"
+                #                 )
                 ind_e_ref = np.searchsorted(
-                    v_bp, v_bp[ind_e - 1] + 5.01e6, side="right"
+                    v_bp, v_bp[ind_e - 1] + 0.501 * WIN_SIZE, side="right"
                 )
                 ind_e_ref = min(n_snp, ind_e_ref + 1)
 
@@ -534,7 +542,8 @@ def main(args):
             dic_pannot_path=dic_pannot_path,
             flag_cross_term=FLAG_CROSS_TERM,
             verbose=True,
-            win_size=1e7,
+            #             win_size=1e7,
+            win_size=WIN_SIZE,
             snp_range=snp_range,
         )
 
@@ -632,6 +641,7 @@ if __name__ == "__main__":
         default=None,
         help="c1_s20_e1701_r1, '_rall' for all ref CHRs",
     )
+    parser.add_argument("--win_size", type=str, default='1e7')
     parser.add_argument("--flag_full_ld", type=bool, default=False)
     parser.add_argument("--flag_cross_term", type=bool, default=False)
     parser.add_argument("--flag_nofil_snp", type=bool, default=False)
