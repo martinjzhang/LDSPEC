@@ -301,17 +301,12 @@ def summarize(
             "h2_se": np.nan,
             "h2s": np.nan,  # Singe-SNP heritability
             "h2s_se": np.nan,
-#             "h2p": np.nan,  # SNP-pair heritability # TODO:remove
-#             "h2p_se": np.nan,
             "h2_enrich": np.nan,
             "h2_enrich_se": np.nan,
             "h2_enrich_p": np.nan,
             "h2s_enrich": np.nan,
             "h2s_enrich_se": np.nan,
             "h2s_enrich_p": np.nan,
-#             "h2p_enrich": np.nan,
-#             "h2p_enrich_se": np.nan,
-#             "h2p_enrich_p": np.nan,
         },
     )
 
@@ -374,7 +369,6 @@ def summarize(
     dic_pAN_n_pair = {x: 0 for x in res_pAN_list}
     dic_pAN_v = {x: np.zeros(len(res_pAN_list), dtype=np.float32) for x in res_pAN_list} # n_overlap between all pAN and the given pAN
     dic_pAN_var = {x: 0 for x in res_pAN_list}  # Total sqrt(var_i var_j)
-#     dic_pAN_var_block = {x: [0] * dic_res["v_h"].shape[0] for x in res_pAN_list}
     dic_pAN_var_block = {x: [0] * n_jn_block for x in res_pAN_list}
 
     for CHR in CHR_list:
@@ -475,7 +469,6 @@ def summarize(
     df_sum_rho["n_pair"] = [dic_pAN_n_pair[x] for x in res_pAN_list]
 
     # Summary : h2, h2s, h2_enrich, h2s_enrich
-#     for term in ["h2", "h2s", "h2p"]:
     for term in ["h2", "h2s"]:
         if term == "h2":
             v_coef = np.array(
@@ -504,17 +497,7 @@ def summarize(
             mat_coef_block = df_coef_block[res_AN_list].values
             dic_v = dic_AN_v
             dic_v_ref = dic_AN_v_ref
-#         if term == "h2p":
-#             v_coef = np.array([dic_coef[x] for x in res_pAN_list], dtype=np.float32)
-#             v_coef_jn = np.array(
-#                 [dic_coef_jn[x] for x in res_pAN_list], dtype=np.float32
-#             )
-#             mat_cov = df_coef_cov.loc[res_pAN_list, res_pAN_list].values
-#             mat_coef_block = df_coef_block[res_pAN_list].values
-#             dic_v = dic_AN_v_p
-#             dic_v_ref = dic_AN_v_p_ref
 
-#         for AN in res_AN_list:
         for i_AN,AN in enumerate(res_AN_list):
             if dic_AN_type[AN] != "binary":
                 continue
@@ -580,7 +563,6 @@ def summarize(
         dic_jn['cor'][i_pAN] = v_esti[0] # JN statistics for cor
         mat_esti_jn = []
         for i in range(n_jn_block):
-#             v_coef_block = df_coef_block.loc[i, res_pAN_list].values
             v_coef_block = mat_coef_block[i, :]
             mat_esti_jn.append(
                 (dic_pAN_v[pAN] * v_coef_block).sum() / dic_pAN_var_block[pAN][i]
@@ -607,7 +589,6 @@ def summarize(
         dic_jn['ecor'][i_pAN] = v_esti[0] # JN statistics for ecor
         mat_esti_jn = []
         for i in range(n_jn_block):
-#             v_coef_block = df_coef_block.loc[i, res_pAN_list].values
             v_coef_block = mat_coef_block[i, :]
             mat_esti_jn.append(
                 (temp_v * v_coef_block).sum() / dic_pAN_var_block[pAN][i]
@@ -616,9 +597,7 @@ def summarize(
         v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res["v_h"])
         df_sum_rho.loc[pAN, "ecor"] = v_mean_jn[0]
         df_sum_rho.loc[pAN, "ecor_se"] = np.sqrt(mat_cov_jn[0, 0])
-        
-        # TODO : store ecor estimates per block
-        
+                
     if verbose:
         print(
             verbose_prefix + "    Completed, time=%0.1fs" % (time.time() - start_time)
