@@ -56,7 +56,6 @@ def compute_ld(
     # block_size_tar, block_size_ref, block_size_sample
     block_size_tar = n_snp_tar
     block_size_ref = 1000
-    #     block_size_sample = 16383
     #     block_size_sample = 8191 # 32767/4
     block_size_sample = 10000  # 32767/4
 
@@ -158,6 +157,13 @@ def compute_ld(
     temp_v2 = 1 / np.sqrt(2 * v_maf_tar * (1 - v_maf_tar))
     mat_ld = mat_ld * np.outer(temp_v1, temp_v2)
     mat_ld[np.isnan(mat_ld)] = 0
+    mat_ld[np.isinf(mat_ld)] = 0
+    # make diagonal values 1, assuming n_snp_tar<n_snp_ref
+    if (ind_s_tar >= ind_s_ref) & (ind_e_tar <= ind_e_ref):
+        for i_tar in range(n_snp_tar):
+            i_ref = i_tar + ind_s_tar - ind_s_ref
+            if mat_ld[i_ref, i_tar] == 0:
+                mat_ld[i_ref, i_tar] = 1
 
     if verbose:
         print("    Completed, time=%0.1fs" % (time.time() - start_time))
