@@ -102,7 +102,7 @@ def estimate(
 
     # df_sumstats
     n_sample_zsq = df_sumstats["N"].mean().astype(int)
-    dic_zsc = {x: y for x, y in zip(df_sumstats["SNP"], df_sumstats["Z"])}    
+    dic_zsc = {x: y for x, y in zip(df_sumstats["SNP"], df_sumstats["Z"])}
     outlier_thres = max(80, 0.001 * n_sample_zsq)  # Finucane 2015 Nat Genet
     if flag_nofil_snp:
         outlier_thres = 1e8
@@ -153,7 +153,7 @@ def estimate(
         verbose=verbose,
         verbose_prefix="    ",
     )
-    
+
     # Summary only in the estimation mode
     if null_model is None:
         dic_res["summary"] = summarize(
@@ -227,7 +227,7 @@ def summarize(
     ----
 
     """
-    
+
     start_time = time.time()
 
     # Annots and pannots
@@ -260,18 +260,17 @@ def summarize(
     err_msg = "dic_pannot_mat does not contain all pannots in dic_res"
     assert len(set(res_pAN_list) - set(pAN_list)) == 0, err_msg
     # TODO : check dic_avgr
-    
+
     if verbose:
         print(verbose_prefix + "# Call: gdreg.regress.summarize")
         print(
             verbose_prefix
-            + "    %d annots, %d pannots"
-            % (len(res_AN_list), len(res_pAN_list))
+            + "    %d annots, %d pannots" % (len(res_AN_list), len(res_pAN_list))
         )
         print(
             verbose_prefix
             + "    %d prox pannots : %s"
-            % (len(res_prox_list), ', '.join(res_prox_list))
+            % (len(res_prox_list), ", ".join(res_prox_list))
         )
 
     temp_list = [x.replace("DLD:", "").replace("LD:", "") for x in dic_res["term"]]
@@ -327,33 +326,35 @@ def summarize(
             "ecor_se": np.nan,
         },
     )
-    
+
     dic_jn = {
-        "v_h" : dic_res["v_h"],
-        "res_AN_list" : res_AN_list,
-        "h2" : np.zeros(len(res_AN_list), dtype=np.float32),
-        "h2.jn" : np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
-        "h2_enrich" : np.zeros(len(res_AN_list), dtype=np.float32),
-        "h2_enrich.jn" : np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
-        "h2s" : np.zeros(len(res_AN_list), dtype=np.float32),
-        "h2s.jn" : np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
-        "h2s_enrich" : np.zeros(len(res_AN_list), dtype=np.float32),
-        "h2s_enrich.jn" : np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
-        "res_pAN_list" : res_pAN_list,
-        "cov" : np.zeros(len(res_pAN_list), dtype=np.float32),
-        "cov.jn" : np.zeros([n_jn_block, len(res_pAN_list)], dtype=np.float32),
-        "cor" : np.zeros(len(res_pAN_list), dtype=np.float32),
-        "cor.jn" : np.zeros([n_jn_block, len(res_pAN_list)], dtype=np.float32),
-        "ecov" : np.zeros(len(res_pAN_list), dtype=np.float32),
-        "ecov.jn" : np.zeros([n_jn_block, len(res_pAN_list)], dtype=np.float32),
-        "ecor" : np.zeros(len(res_pAN_list), dtype=np.float32),
-        "ecor.jn" : np.zeros([n_jn_block, len(res_pAN_list)], dtype=np.float32),
+        "v_h": dic_res["v_h"],
+        "res_AN_list": res_AN_list,
+        "h2": np.zeros(len(res_AN_list), dtype=np.float32),
+        "h2.jn": np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
+        "h2_enrich": np.zeros(len(res_AN_list), dtype=np.float32),
+        "h2_enrich.jn": np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
+        "h2s": np.zeros(len(res_AN_list), dtype=np.float32),
+        "h2s.jn": np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
+        "h2s_enrich": np.zeros(len(res_AN_list), dtype=np.float32),
+        "h2s_enrich.jn": np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
+        "res_pAN_list": res_pAN_list,
+        "cov": np.zeros(len(res_pAN_list), dtype=np.float32),
+        "cov.jn": np.zeros([n_jn_block, len(res_pAN_list)], dtype=np.float32),
+        "cor": np.zeros(len(res_pAN_list), dtype=np.float32),
+        "cor.jn": np.zeros([n_jn_block, len(res_pAN_list)], dtype=np.float32),
+        "ecov": np.zeros(len(res_pAN_list), dtype=np.float32),
+        "ecov.jn": np.zeros([n_jn_block, len(res_pAN_list)], dtype=np.float32),
+        "ecor": np.zeros(len(res_pAN_list), dtype=np.float32),
+        "ecor.jn": np.zeros([n_jn_block, len(res_pAN_list)], dtype=np.float32),
     }
 
     # Iterate over CHR_list to collect info
     dic_AN_n_snp = {x: 0 for x in res_AN_list}
     dic_AN_type = {x: "binary" for x in res_AN_list}
-    dic_AN_v = {x: np.zeros(len(res_AN_list), dtype=np.float32) for x in res_AN_list} # n_overlap between all AN and the given AN
+    dic_AN_v = {
+        x: np.zeros(len(res_AN_list), dtype=np.float32) for x in res_AN_list
+    }  # n_overlap between all AN and the given AN
     dic_AN_n_snp_ref = {x: 0 for x in res_AN_list}
     dic_AN_v_ref = {
         x: np.zeros(len(res_AN_list), dtype=np.float32) for x in res_AN_list
@@ -367,7 +368,9 @@ def summarize(
     }  # Reference h2p coefficients
 
     dic_pAN_n_pair = {x: 0 for x in res_pAN_list}
-    dic_pAN_v = {x: np.zeros(len(res_pAN_list), dtype=np.float32) for x in res_pAN_list} # n_overlap between all pAN and the given pAN
+    dic_pAN_v = {
+        x: np.zeros(len(res_pAN_list), dtype=np.float32) for x in res_pAN_list
+    }  # n_overlap between all pAN and the given pAN
     dic_pAN_var = {x: 0 for x in res_pAN_list}  # Total sqrt(var_i var_j)
     dic_pAN_var_block = {x: [0] * n_jn_block for x in res_pAN_list}
 
@@ -498,7 +501,7 @@ def summarize(
             dic_v = dic_AN_v
             dic_v_ref = dic_AN_v_ref
 
-        for i_AN,AN in enumerate(res_AN_list):
+        for i_AN, AN in enumerate(res_AN_list):
             if dic_AN_type[AN] != "binary":
                 continue
 
@@ -511,9 +514,11 @@ def summarize(
             df_sum_tau.loc[AN, "%s_se" % term] = np.sqrt(
                 dic_v[AN].dot(mat_cov).dot(dic_v[AN])
             )
-            dic_jn[term][i_AN] = (dic_v[AN] * v_coef).sum() # JN statistics for h2
+            dic_jn[term][i_AN] = (dic_v[AN] * v_coef).sum()  # JN statistics for h2
             for i in range(n_jn_block):
-                dic_jn['%s.jn'%term][i, i_AN] = (dic_v[AN] * mat_coef_block[i, :]).sum()
+                dic_jn["%s.jn" % term][i, i_AN] = (
+                    dic_v[AN] * mat_coef_block[i, :]
+                ).sum()
 
             # h2_enrich and h2_enrich_se via JN
             if n_snp_dif < n_snp_AN * 0.1:
@@ -521,17 +526,21 @@ def summarize(
             h2_ps = (dic_v[AN] * v_coef).sum() / n_snp_AN
             h2_ps_ref = (dic_v_ref[AN] * v_coef).sum() / n_snp_ref
             v_esti = [h2_ps / h2_ps_ref]
-            dic_jn['%s_enrich'%term][i_AN] = h2_ps / h2_ps_ref # JN statistics for h2_enrich
+            dic_jn["%s_enrich" % term][i_AN] = (
+                h2_ps / h2_ps_ref
+            )  # JN statistics for h2_enrich
             mat_esti_jn = []
             for i in range(n_jn_block):
                 h2_ps = (dic_v[AN] * mat_coef_block[i, :]).sum() / n_snp_AN
                 h2_ps_ref = (dic_v_ref[AN] * mat_coef_block[i, :]).sum() / n_snp_ref
                 mat_esti_jn.append(h2_ps / h2_ps_ref)
-                dic_jn['%s_enrich.jn'%term][i, i_AN] = h2_ps / h2_ps_ref # JN statistics for h2_enrich
+                dic_jn["%s_enrich.jn" % term][i, i_AN] = (
+                    h2_ps / h2_ps_ref
+                )  # JN statistics for h2_enrich
             v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res["v_h"])
             df_sum_tau.loc[AN, "%s_enrich" % term] = v_mean_jn[0]
             df_sum_tau.loc[AN, "%s_enrich_se" % term] = np.sqrt(mat_cov_jn[0, 0])
-            
+
             # h2_enrich_p
             temp_v = (
                 dic_v[AN] * (1 / n_snp_AN + 1 / n_snp_dif) - dic_v_ref[AN] / n_snp_dif
@@ -554,56 +563,61 @@ def summarize(
         df_sum_rho.loc[pAN, "cov_se"] = np.sqrt(
             dic_pAN_v[pAN].dot(mat_cov).dot(dic_pAN_v[pAN])
         )
-        dic_jn['cov'][i_pAN] = (dic_pAN_v[pAN] * v_coef).sum() # JN statistics for cov
+        dic_jn["cov"][i_pAN] = (dic_pAN_v[pAN] * v_coef).sum()  # JN statistics for cov
         for i in range(n_jn_block):
-            dic_jn['cov.jn'][i, i_pAN] = (dic_pAN_v[pAN] * mat_coef_block[i, :]).sum()
-        
+            dic_jn["cov.jn"][i, i_pAN] = (dic_pAN_v[pAN] * mat_coef_block[i, :]).sum()
+
         # cor, cor_se via JN
         v_esti = [(dic_pAN_v[pAN] * v_coef).sum() / dic_pAN_var[pAN]]
-        dic_jn['cor'][i_pAN] = v_esti[0] # JN statistics for cor
+        dic_jn["cor"][i_pAN] = v_esti[0]  # JN statistics for cor
         mat_esti_jn = []
         for i in range(n_jn_block):
             v_coef_block = mat_coef_block[i, :]
             mat_esti_jn.append(
                 (dic_pAN_v[pAN] * v_coef_block).sum() / dic_pAN_var_block[pAN][i]
             )
-            dic_jn['cor.jn'][i, i_pAN] = mat_esti_jn[-1] # JN statistics for cor
+            dic_jn["cor.jn"][i, i_pAN] = mat_esti_jn[-1]  # JN statistics for cor
         v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res["v_h"])
         df_sum_rho.loc[pAN, "cor"] = v_mean_jn[0]
         df_sum_rho.loc[pAN, "cor_se"] = np.sqrt(mat_cov_jn[0, 0])
-        
+
         # ecov, ecov_se; ecor, ecor_se via JN
         temp_v = dic_pAN_v[pAN].copy()
         for prox in res_prox_list:
             temp_r = dic_pAN_v[prox][i_pAN] / df_sum_rho.loc[prox, "n_pair"]
-            temp_v -= dic_pAN_v[prox] * temp_r # TODO: support overlapping prox
+            temp_v -= dic_pAN_v[prox] * temp_r  # TODO: support overlapping prox
 
         df_sum_rho.loc[pAN, "ecov"] = (temp_v * v_coef_jn).sum()
         df_sum_rho.loc[pAN, "ecov_se"] = np.sqrt(temp_v.dot(mat_cov).dot(temp_v))
-        
-        dic_jn['ecov'][i_pAN] = (temp_v * v_coef).sum() # JN statistics for ecov
+
+        dic_jn["ecov"][i_pAN] = (temp_v * v_coef).sum()  # JN statistics for ecov
         for i in range(n_jn_block):
-            dic_jn['ecov.jn'][i, i_pAN] = (temp_v * mat_coef_block[i, :]).sum()
-        
+            dic_jn["ecov.jn"][i, i_pAN] = (temp_v * mat_coef_block[i, :]).sum()
+
         v_esti = [(temp_v * v_coef).sum() / dic_pAN_var[pAN]]
-        dic_jn['ecor'][i_pAN] = v_esti[0] # JN statistics for ecor
+        dic_jn["ecor"][i_pAN] = v_esti[0]  # JN statistics for ecor
         mat_esti_jn = []
         for i in range(n_jn_block):
             v_coef_block = mat_coef_block[i, :]
             mat_esti_jn.append(
                 (temp_v * v_coef_block).sum() / dic_pAN_var_block[pAN][i]
             )
-            dic_jn['ecor.jn'][i, i_pAN] = mat_esti_jn[-1] # JN statistics for ecor
+            dic_jn["ecor.jn"][i, i_pAN] = mat_esti_jn[-1]  # JN statistics for ecor
         v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res["v_h"])
         df_sum_rho.loc[pAN, "ecor"] = v_mean_jn[0]
         df_sum_rho.loc[pAN, "ecor_se"] = np.sqrt(mat_cov_jn[0, 0])
-                
+
     if verbose:
         print(
             verbose_prefix + "    Completed, time=%0.1fs" % (time.time() - start_time)
         )
 
-    return {"tau": df_sum_tau, "rho": df_sum_rho, "prox_list": res_prox_list, "dic_jn":dic_jn}
+    return {
+        "tau": df_sum_tau,
+        "rho": df_sum_rho,
+        "prox_list": res_prox_list,
+        "dic_jn": dic_jn,
+    }
 
 
 def get_block(df_reg, pannot_list=[], sym_non_pAN="non-pAN", n_block=100):
@@ -738,9 +752,7 @@ def regress(
         temp_list = ["LD:AN:all"]
     else:
         temp_list = [
-            x
-            for x in df_reg
-            if x.startswith("LD:AN:all_") | x.startswith("LD:AN:mbin")
+            x for x in df_reg if x.startswith("LD:AN:all_") | x.startswith("LD:AN:mbin")
         ]
     v_ld = df_reg[temp_list].sum(axis=1).values.clip(min=0.1)
     if verbose:
@@ -789,29 +801,30 @@ def regress(
         "coef_block": dic_jn["coef_block"],
         "v_h": dic_jn["v_h"],
     }
-    
+
     # Model evaluation
     dic_eval = {}
     if null_model is not None:
         if verbose:
             print(verbose_prefix + "    Eval against null: %s" % ", ".join(null_model))
 
-        # Observed statistics: loglss, mse, mae     
+        # Observed statistics: loglss, mse, mae
         mat_X = df_reg[reg_list].values.astype(np.float32)
         mat_X[:, :-1] *= n_sample_zsq
         v_y = df_reg["ZSQ"].values.astype(np.float32)
         if verbose:
             print(
-                verbose_prefix + "    Chi2: %d zeros, imputed as %0.2e" % 
-                ((v_y==0).sum(), v_y[v_y>0].min())
+                verbose_prefix
+                + "    Chi2: %d zeros, imputed as %0.2e"
+                % ((v_y == 0).sum(), v_y[v_y > 0].min())
             )
-        v_y[v_y==0] = v_y[v_y>0].min()
+        v_y[v_y == 0] = v_y[v_y > 0].min()
         v_y_hat = np.dot(mat_X, dic_res_reg["coef"])
-        temp_v = sp.stats.gamma.logpdf(v_y, a=0.5, scale=2*v_y_hat.clip(min=0.1))
+        temp_v = sp.stats.gamma.logpdf(v_y, a=0.5, scale=2 * v_y_hat.clip(min=0.1))
         dic_eval["loglss"] = (temp_v / v_ld).sum()
-        dic_eval["sqe"] = ((v_y - v_y_hat)**2 / v_ld ).sum()
+        dic_eval["sqe"] = ((v_y - v_y_hat) ** 2 / v_ld).sum()
         dic_eval["abe"] = (np.absolute(v_y - v_y_hat) / v_ld).sum()
-        
+
         # Null loglss
         n_rep = 20
         dic_eval["loglss.null"] = np.zeros(n_rep, dtype=np.float32)
@@ -822,39 +835,49 @@ def regress(
             mat_X = df_reg[reg_list].values.astype(np.float32)
             mat_X[:, :-1] *= n_sample_zsq
             v_y = df_reg["ZSQ"].values.astype(np.float32)
-            for i_reg,reg in enumerate(reg_list):
+            for i_reg, reg in enumerate(reg_list):
                 if reg not in null_model:
                     mat_X[:, i_reg] = np.random.permutation(mat_X[:, i_reg])
 
             mat_X = (mat_X.T * v_w).T
             v_y = v_y * v_w
             dic_jn = reg_bjn(v_y, mat_X, dic_block)
-            
+
             mat_X = df_reg[reg_list].values.astype(np.float32)
             mat_X[:, :-1] *= n_sample_zsq
             v_y = df_reg["ZSQ"].values.astype(np.float32)
-            v_y[v_y==0] = v_y[v_y>0].min()
+            v_y[v_y == 0] = v_y[v_y > 0].min()
             v_y_hat = np.dot(mat_X, dic_jn["coef"])
-            temp_v = sp.stats.gamma.logpdf(v_y, a=0.5, scale=2*v_y_hat.clip(min=0.1))
+            temp_v = sp.stats.gamma.logpdf(v_y, a=0.5, scale=2 * v_y_hat.clip(min=0.1))
             dic_eval["loglss.null"][i_rep] = (temp_v / v_ld).sum()
-            dic_eval["sqe.null"][i_rep] = ((v_y - v_y_hat)**2 / v_ld ).sum()
+            dic_eval["sqe.null"][i_rep] = ((v_y - v_y_hat) ** 2 / v_ld).sum()
             dic_eval["abe.null"][i_rep] = (np.absolute(v_y - v_y_hat) / v_ld).sum()
-        
+
         for term in ["loglss", "sqe", "abe"]:
-            dic_eval["%s.dif" % term] = dic_eval[term] - dic_eval["%s.null" % term].mean()
+            dic_eval["%s.dif" % term] = (
+                dic_eval[term] - dic_eval["%s.null" % term].mean()
+            )
             dic_eval["%s.null_se" % term] = dic_eval["%s.null" % term].std()
-            dic_eval["%s.dif_z" % term] = dic_eval["%s.dif" % term]  / dic_eval["%s.null_se" % term]
+            dic_eval["%s.dif_z" % term] = (
+                dic_eval["%s.dif" % term] / dic_eval["%s.null_se" % term]
+            )
             dic_eval["%s.dif_p" % term] = gdreg.util.zsc2pval(
                 dic_eval["%s.dif_z" % term], option="two-sided"
             )
-            
+
             if verbose:
-                print(verbose_prefix + "    %s=%0.3e, dif=%0.2f, null_se=%0.2f, z=%0.2f, p=%0.2e" % (
-                    term, dic_eval[term], dic_eval["%s.dif" % term],
-                    dic_eval["%s.null_se" % term], 
-                    dic_eval["%s.dif_z" % term], 
-                    dic_eval["%s.dif_p" % term],  
-                ))
+                print(
+                    verbose_prefix
+                    + "    %s=%0.3e, dif=%0.2f, null_se=%0.2f, z=%0.2f, p=%0.2e"
+                    % (
+                        term,
+                        dic_eval[term],
+                        dic_eval["%s.dif" % term],
+                        dic_eval["%s.null_se" % term],
+                        dic_eval["%s.dif_z" % term],
+                        dic_eval["%s.dif_p" % term],
+                    )
+                )
         dic_res_reg["eval"] = dic_eval
 
     if verbose:
