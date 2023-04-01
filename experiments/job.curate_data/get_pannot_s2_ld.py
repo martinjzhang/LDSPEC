@@ -14,6 +14,8 @@ def main(args):
     PGEN_FILE = args.pgen_file
     LB = args.lb
     UB = args.ub
+    LDLB = float(args.ldlb)
+    LDUB = float(args.ldub)
     LD_FILE = args.ld_file
     OUT_PATH = args.out_path
 
@@ -21,6 +23,8 @@ def main(args):
     print("--pgen_file %s" % PGEN_FILE)
     print("--lb %s" % LB)
     print("--ub %s" % UB)
+    print("--ldlb %0.3f" % LDLB)
+    print("--ldub %0.3f" % LDUB)
     print("--ld_file %s" % LD_FILE)
     print("--out_path %s" % OUT_PATH)
 
@@ -47,7 +51,8 @@ def main(args):
             for j in range(i+1, len(snp_list)):
                 ld = v_ld[j]
                 dist = dic_bp[snp_list[j]] - dic_bp[snp_list[i]] 
-                if (ld>=0.5) & (dist>=LB) & (dist<UB):
+#                 if (ld>=0.5) & (dist>=LB) & (dist<UB):
+                if (ld>=LDLB) & (ld<=LDUB) & (dist>=LB) & (dist<UB):
                     snp_list1.append(snp_list[i])
                     snp_list2.append(snp_list[j])
                 elif dist>=UB:
@@ -76,10 +81,13 @@ def main(args):
 
         snp_pair_list = [(x,y) for x,y in zip(temp_snp_list1, temp_snp_list2)]
         if len(snp_pair_list) > 10:
+            LDLB_str = 'n%d'%(int(-LDLB*100)) if LDLB<0 else 'p%d'%(int(LDLB*100))
+            LDUB_str = 'n%d'%(int(-LDUB*100)) if LDLB<0 else 'p%d'%(int(LDUB*100))
             gdreg.util.write_pannot_mat(
-                snp_pair_list, list(df_snp_chr["SNP"]), OUT_PATH + "/ldp5_proxy_%d_%d_%s_%s.chr%d" % (LB, UB, term1, term2, CHR)
+                snp_pair_list, list(df_snp_chr["SNP"]), 
+                OUT_PATH + "/ld%s%s_proxy_%d_%d_%s_%s.chr%d" % (LDLB_str, LDUB_str, LB, UB, term1, term2, CHR)
             )
-        print('pAN:ldp5_proxy_%d_%d_%s_%s' % (LB, UB, term1, term2), 'size=%d'% len(temp_snp_list1)) 
+        print("/ld%s%s_proxy_%d_%d_%s_%s" % (LDLB_str, LDUB_str, LB, UB, term1, term2), 'size=%d'% len(temp_snp_list1)) 
 
     print('# Finished, time=%0.1fs'%(time.time() - sys_start_time))
     
@@ -88,6 +96,8 @@ if __name__ == '__main__':
     parser.add_argument('--pgen_file', type=str, default=None)
     parser.add_argument('--lb', type=int, default=None)
     parser.add_argument('--ub', type=int, default=None)
+    parser.add_argument('--ldlb', type=str, default=None)
+    parser.add_argument('--ldub', type=str, default=None)
     parser.add_argument('--ld_file', type=str, default=None)
     parser.add_argument('--out_path', type=str, default=None)
     

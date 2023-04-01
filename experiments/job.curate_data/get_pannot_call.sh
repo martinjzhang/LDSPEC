@@ -93,7 +93,7 @@
 # done
 
 # ldp5_proxy
-for CHROM in {1..21}
+for CHROM in {1..22}
 # for CHROM in 22
 do
 PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3
@@ -101,30 +101,15 @@ LD_FILE=/n/scratch3/users/j/jz286/imp_geno.gdreg_ld/ukb_imp_v3.@_ld.npz
 OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/ldp5_proxy_0_1000
 # OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/pannot_ldp5_proxy_100_1000
 # OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/pannot_ldp5_proxy_1000_10000
-# python get_pannot_s2_ld.py --pgen_file $PGEN_FILE --lb 0 --ub 100 --ld_file $LD_FILE --out_path $OUT_PATH
+# chimp
+PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno_chimp/ukb_imp_chr${CHROM}_v3_chimp
+LD_FILE=/n/scratch3/users/j/jz286/imp_geno_chimp.gdreg_ld_win1e6/ukb_imp_v3_chimp.@_ld.npz
+OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001_chimp/pannot/ldp5_proxy_0_100
+OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001_chimp/pannot/ldp5_proxy_0_1000
+OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001_chimp/pannot/ldp5_proxy_0_10000
 sbatch -p short -t 0-3:00 -n 1 -c 1 --mem=32000 --open-mode=truncate -o $OUT_PATH/chr${CHROM}.sbatch.log --wrap " \
-python get_pannot_s2_ld.py --pgen_file $PGEN_FILE --lb 0 --ub 1000 --ld_file $LD_FILE --out_path $OUT_PATH"
+python get_pannot_s2_ld.py --pgen_file $PGEN_FILE --ldlb 0.5 --ldub 2 --lb 0 --ub 10000 --ld_file $LD_FILE --out_path $OUT_PATH"
 done
-
-# # Loop
-# # for CHROM in {1..21}
-# for CHROM in 22
-# do
-# PGEN_FILE=/n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3
-# LOOP_FILE=/n/groups/price/martin/data_GDREG/gene_annotation/3dgenome_loops/Dixon_2015.H1-ESC.hg19.peakachu-merged.loops
-# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/Dixon_2015_H1_ESC
-# LOOP_FILE=/n/groups/price/martin/data_GDREG/gene_annotation/3dgenome_loops/Dixon_2015.H1-MES.hg19.peakachu-merged.loops
-# OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/Dixon_2015_H1_MES
-# # LOOP_FILE=/n/groups/price/martin/data_GDREG/gene_annotation/3dgenome_loops/Dixon_2015.H1-MSC.hg19.peakachu-merged.loops
-# # OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/Dixon_2015_H1_MSC
-# # LOOP_FILE=/n/groups/price/martin/data_GDREG/gene_annotation/3dgenome_loops/Dixon_2015.H1-NPC.hg19.peakachu-merged.loops
-# # OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/Dixon_2015_H1_NPC
-# # LOOP_FILE=/n/groups/price/martin/data_GDREG/gene_annotation/3dgenome_loops/Dixon_2015.H1-TRO.hg19.peakachu-merged.loops
-# # OUT_PATH=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/pannot/Dixon_2015_H1_TRO
-# # python get_pannot_s5_loop.py --pgen_file $PGEN_FILE --loop_file $LOOP_FILE --out_path $OUT_PATH
-# sbatch -p short -t 0-1:00 -n 1 -c 1 --mem=32000 --open-mode=truncate -o $OUT_PATH/chr${CHROM}.sbatch.log --wrap " \
-# python get_pannot_s5_loop.py --pgen_file $PGEN_FILE --loop_file $LOOP_FILE --out_path $OUT_PATH"
-# done
 
 # # Baseline
 # for CHROM in {1..22}
