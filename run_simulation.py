@@ -50,7 +50,7 @@ def main(args):
     # Parse and check arguments
     LEGAL_JOB_LIST = [
         "simulate",
-        "compute_phen",
+        #         "compute_phen",
         "compute_sumstats",
     ]
     err_msg = "# run_gdreg: --job=%s not supported" % JOB
@@ -257,8 +257,8 @@ def main(args):
             random_seed=RANDOM_SEED,
             verbose=True,
         )
-        df_effect.to_csv(PREFIX_OUT + ".eff.gz", sep="\t", index=False)
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        #         df_effect.to_csv(PREFIX_OUT + ".eff.gz", sep="\t", index=False)
+        #         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
         # Compute .phen
         df_effect_ = df_effect.copy()
@@ -271,6 +271,17 @@ def main(args):
             random_seed=RANDOM_SEED + 42,
             verbose=True,
         )
+        #         df_phen.to_csv(PREFIX_OUT + ".phen", sep="\t", index=False)
+        #         print("    " + gdreg.util.get_sys_info(sys_start_time))
+
+        # Scale df_phen and df_effect by SD(y), and save files
+        scale_factor = 1 / df_phen["TRAIT"].std()
+        for col in df_phen:
+            if col in ["FID", "IID"]:
+                continue
+            df_phen[col] = df_phen[col] * scale_factor
+        df_effect["EFF"] = df_effect["EFF"] * scale_factor
+        df_effect.to_csv(PREFIX_OUT + ".eff.gz", sep="\t", index=False)
         df_phen.to_csv(PREFIX_OUT + ".phen", sep="\t", index=False)
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
@@ -299,18 +310,18 @@ def main(args):
         df_sumstats.to_csv(PREFIX_OUT + ".sumstats.gz", sep="\t", index=False)
         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
-    if JOB == "compute_phen":
-        df_phen = gdreg.simulate.simulate_phen(
-            dic_data,
-            dic_coef,
-            df_effect,
-            dic_annot_path=dic_annot_path,
-            block_size=500,
-            random_seed=RANDOM_SEED + 42,
-            verbose=True,
-        )
-        df_phen.to_csv(PREFIX_OUT + ".phen", sep="\t", index=False)
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+    #     if JOB == "compute_phen":
+    #         df_phen = gdreg.simulate.simulate_phen(
+    #             dic_data,
+    #             dic_coef,
+    #             df_effect,
+    #             dic_annot_path=dic_annot_path,
+    #             block_size=500,
+    #             random_seed=RANDOM_SEED + 42,
+    #             verbose=True,
+    #         )
+    #         df_phen.to_csv(PREFIX_OUT + ".phen", sep="\t", index=False)
+    #         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
     if JOB == "compute_sumstats":
         df_sumstats = gdreg.simulate.compute_sumstats(
