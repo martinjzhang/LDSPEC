@@ -296,16 +296,22 @@ def summarize(
             "n_snp": 0,
             "tau": [dic_coef_jn[x] for x in res_AN_list],
             "tau_se": [np.sqrt(df_coef_cov.loc[x, x]) for x in res_AN_list],
+            "tau_p": np.nan,
             "h2": np.nan,  # Total heritability
             "h2_se": np.nan,
-            "h2s": np.nan,  # Singe-SNP heritability
+            "h2_p": np.nan,
+            "h2s": np.nan,  # Sum of causal effect size variance (SCV)
             "h2s_se": np.nan,
+            "h2s_p": np.nan,
             "h2_enrich": np.nan,
             "h2_enrich_se": np.nan,
             "h2_enrich_p": np.nan,
             "h2s_enrich": np.nan,
             "h2s_enrich_se": np.nan,
             "h2s_enrich_p": np.nan,
+            "h2_shrink": np.nan,
+            "h2_shrink_se": np.nan,
+            "h2_shrink_p": np.nan,
         },
     )
 
@@ -316,14 +322,19 @@ def summarize(
             "n_pair": 0,
             "rho": [dic_coef_jn[x] for x in res_pAN_list],
             "rho_se": [np.sqrt(df_coef_cov.loc[x, x]) for x in res_pAN_list],
+            "rho_p": np.nan,
             "cov": np.nan,  # Total covariance
             "cov_se": np.nan,
+            "cov_p": np.nan,
             "cor": np.nan,  # Average correlation
             "cor_se": np.nan,
+            "cor_p": np.nan,
             "ecov": np.nan,  # Excess total covariance
             "ecov_se": np.nan,
+            "ecov_p": np.nan,
             "ecor": np.nan,  # Excess average correlation
             "ecor_se": np.nan,
+            "ecor_p": np.nan,
         },
     )
 
@@ -548,7 +559,7 @@ def summarize(
             dif_ = (temp_v * v_coef_jn).sum()
             se_ = np.sqrt(temp_v.dot(mat_cov).dot(temp_v))
             df_sum_tau.loc[AN, "%s_enrich_p" % term] = gdreg.util.zsc2pval(
-                dif_ / se_, option="one-sided"
+                dif_ / se_, option="two-sided"
             )
 
     # Summary : cov, cov_se, cor, cor_se
@@ -606,6 +617,30 @@ def summarize(
         v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res["v_h"])
         df_sum_rho.loc[pAN, "ecor"] = v_mean_jn[0]
         df_sum_rho.loc[pAN, "ecor_se"] = np.sqrt(mat_cov_jn[0, 0])
+
+    # Add p-value via z-score
+    for term in ["tau", "h2", "h2s"]:
+        temp_z = df_sum_tau[term].values / df_sum_tau["%s_se" % term].values
+        df_sum_tau["%s_p" % term] = gdreg.util.zsc2pval(temp_z, option="two-sided")
+    for term in ["rho", "cov", "ecov"]:
+        temp_z = df_sum_rho[term].values / df_sum_rho["%s_se" % term].values
+        df_sum_rho["%s_p" % term] = gdreg.util.zsc2pval(temp_z, option="two-sided")
+
+    # Add h2_shrink, p-value via testing whether h2 - h2s = 0
+    v_mean_jn, mat_cov_jn = bjn(
+        dic_jn["h2"] / dic_jn["h2s"], dic_jn["h2.jn"] / dic_jn["h2s.jn"], dic_jn["v_h"]
+    )
+    df_sum_tau["h2_shrink"] = v_mean_jn
+    df_sum_tau["h2_shrink_se"] = np.sqrt(np.diag(mat_cov_jn))
+    v_mean_jn, mat_cov_jn = bjn(
+        dic_jn["h2"] - dic_jn["h2s"], dic_jn["h2.jn"] - dic_jn["h2s.jn"], dic_jn["v_h"]
+    )
+    temp_z = v_mean_jn / np.sqrt(np.diag(mat_cov_jn))
+    df_sum_tau["h2_shrink_p"] = gdreg.util.zsc2pval(temp_z, option="two-sided")
+
+    # Add p-value for cor (same as cov) and ecor (same as ecov)
+    df_sum_rho["cor_p"] = df_sum_rho["cov_p"]
+    df_sum_rho["ecor_p"] = df_sum_rho["ecov_p"]
 
     if verbose:
         print(
