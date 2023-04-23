@@ -130,24 +130,59 @@ def meta_analysis(effects, se, method="random", weights=None):
 
 def zsc2pval(zsc, option="two-sided"):
     """
-    Convert z-score to one-sided p-value. Accurate up to `zsc=36` and `pval=4.2e-284`.
+    Convert z-score to p-value. Accurate up to `zsc=36` and `pval=4.2e-284`.
     """
     #     return 1 - sp.stats.norm.cdf(zsc)
     if option == "one-sided":
         return sp.stats.norm.cdf(-zsc)  # This is more accurate
     if option == "two-sided":
         return sp.stats.norm.cdf(-np.absolute(zsc)) * 2
+    
+    
+def pval2zsc(pval, option="two-sided"):
+    """
+    Convert p-value to a positive z-score. Accurate up to `zsc=36` and `pval=4.2e-284`.
+    """
+    if option == "one-sided":
+        return -sp.stats.norm.ppf(pval)
+    if option == "two-sided":
+        return -sp.stats.norm.ppf(pval/2)
+
+# def pval2zsc(pval):
+#     """
+#     Convert one-sided p-value to z-score. Accurate up to `zsc=36` and `pval=4.2e-284`.
+#     """
+#     return -sp.stats.norm.ppf(pval
 
 
-def pval2zsc(pval):
+def ldspec_meta(res_list, term, row):
     """
-    Convert one-sided p-value to z-score. Accurate up to `zsc=36` and `pval=4.2e-284`.
+    Meta-analysis for LD-SPEC estimates.
     """
-    return -sp.stats.norm.ppf(pval)
+    if term in ['tau', 'h2', 'h2_enrich', 'rho', 'cov', 'ecov']: # use the term itself as test statistics
+        mean_list = [x.loc[row, term] for x in res_list]
+        se_list = [x.loc[row, '%s_se'%term] for x in res_list]
+    elif term == 'h2_shrink': # use h2-h2s as test statistics
+        mean_list = [x.loc[row, 'h2'] - x.loc[row, 'h2s'] for x in res_list]
+        z_list = [zsc2pval(x.loc[row, 'h2_shrink_p'], option='two-sided') for x in res_list]
+        se_list = [x/y for x,y in zip(mean_list, z_list)]
+    elif term == 'cor': # use `cov` as test statistics
+        mean_list = [x.loc[row, 'cov'] for x in res_list]
+        se_list = [x.loc[row, 'cov_se'] for x in res_list]
+    elif term == 'ecor': # use `ecov` as test statistics
+        mean_list = [x.loc[row, 'ecov'] for x in res_list]
+        se_list = [x.loc[row, 'ecov_se'] for x in res_list]
+    else:
+        raise ValueError("term '%s' not supported" % term)
+
+    meta_mean,meta_se = meta_analysis(np.array(mean_list), np.array(se_list))
+    meta_z = meta_mean / meta_se
+    meta_p = zsc2pval(meta_z) 
+    return meta_mean,meta_se,meta_z,meta_p
 
 
 ################################################################################
-################################## GDREG model #################################
+################################# LDSPEC model #################################
 ################################################################################
 def pannot_to_csr(v_gene, sym_non_pAN="non-pAN", flag_matS=True):
     """Convert .pannot to a sparse indicator matrix
