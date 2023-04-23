@@ -321,7 +321,8 @@ def compute_score(
         print("    win_size=%0.1fMB" % (win_size / 1e6))
 
     # Compute score
-    block_size = 10000
+#     block_size = 10000
+    block_size = 1000
     df_score = None
     for CHR in CHR_list:
         if snp_range is not None:
