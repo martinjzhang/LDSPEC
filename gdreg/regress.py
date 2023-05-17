@@ -3,6 +3,7 @@ import scipy as sp
 import pandas as pd
 import time
 import gdreg
+import itertools
 import warnings
 
 
@@ -254,7 +255,7 @@ def summarize(
     res_pAN_list = [
         x.replace("DLD:", "") for x in dic_res["term"] if x.startswith("DLD:")
     ]
-    res_prox_list = [x for x in res_pAN_list if "prox" in x]  # pAN's for priximity
+    res_prox_list = [x for x in res_pAN_list if "prox" in x]  # pAN's for proximity
     err_msg = "df_annot does not contain all annots in dic_res"
     assert len(set(res_AN_list) - set(AN_list)) == 0, err_msg
     err_msg = "dic_pannot_mat does not contain all pannots in dic_res"
@@ -385,7 +386,8 @@ def summarize(
     dic_pAN_var = {x: 0 for x in res_pAN_list}  # Total sqrt(var_i var_j)
     dic_pAN_var_block = {x: [0] * n_jn_block for x in res_pAN_list}
 
-    for CHR in CHR_list:
+    #     for CHR in CHR_list:
+    for i_CHR, CHR in enumerate(CHR_list):
         # df_annot_chr
         df_annot_chr = pd.DataFrame(
             index=dic_data[CHR]["pvar"]["SNP"],
@@ -459,6 +461,49 @@ def summarize(
                     .dot(mat_h2ps_block[i, :])
                     .T.dot(mat_h2ps_block[i, :])
                 )
+
+        # Create non-overlapping prox and update info
+        if i_CHR == 0:
+            dic_prox_n_pair, dic_prox_v = {}, {}
+            for sub_prox in itertools.product(
+                [0, 1], repeat=len(res_prox_list)
+            ):  # defined in logic relations, [1, 0] meaning G1 - G2
+                if np.sum(sub_prox) == 0:
+                    continue
+                temp_mat_G = dic_mat_G_chr[res_prox_list[np.where(sub_prox)[0][0]]].copy()
+                for val,pAN in zip(sub_prox, res_prox_list):
+                    if val == 1:
+                        temp_mat_G = temp_mat_G.multiply(dic_mat_G_chr[pAN])
+                    else:
+                        temp_mat_G = temp_mat_G > dic_mat_G_chr[pAN]
+
+                if temp_mat_G.sum() > 0:
+                    dic_prox_n_pair[sub_prox] = temp_mat_G.sum()
+                    temp_list = [
+                        temp_mat_G.multiply(dic_mat_G_chr[x]).sum()
+                        for x in res_pAN_list
+                    ]
+                    dic_prox_v[sub_prox] = np.array(temp_list, dtype=np.float32)
+            if verbose:
+                print(
+                    verbose_prefix
+                    + "    %d non-overlapping pannots : %s"
+                    % (len(dic_prox_n_pair), ", ".join([str(x) for x in dic_prox_n_pair]))
+                )
+        else:
+            for sub_prox in dic_prox_n_pair:
+                temp_mat_G = dic_mat_G_chr[res_prox_list[np.where(sub_prox)[0][0]]].copy()
+                for val,pAN in zip(sub_prox, res_prox_list):
+                    if val == 1:
+                        temp_mat_G = temp_mat_G.multiply(dic_mat_G_chr[pAN])
+                    else:
+                        temp_mat_G = temp_mat_G > dic_mat_G_chr[pAN]
+
+                dic_prox_n_pair[sub_prox] += temp_mat_G.sum()
+                temp_list = [
+                    temp_mat_G.multiply(dic_mat_G_chr[x]).sum() for x in res_pAN_list
+                ]
+                dic_prox_v[sub_prox] += np.array(temp_list, dtype=np.float32)
 
         # Update annot * pannot info for h2p and h2p_enrich
         for AN in res_AN_list:
@@ -567,7 +612,6 @@ def summarize(
     v_coef_jn = np.array([dic_coef_jn[x] for x in res_pAN_list], dtype=np.float32)
     mat_cov = df_coef_cov.loc[res_pAN_list, res_pAN_list].values
     mat_coef_block = df_coef_block[res_pAN_list].values
-    #     for pAN in res_pAN_list:
     for i_pAN, pAN in enumerate(res_pAN_list):
         # cov, cov_se
         df_sum_rho.loc[pAN, "cov"] = (dic_pAN_v[pAN] * v_coef_jn).sum()
@@ -594,9 +638,12 @@ def summarize(
 
         # ecov, ecov_se; ecor, ecor_se via JN
         temp_v = dic_pAN_v[pAN].copy()
-        for prox in res_prox_list:
-            temp_r = dic_pAN_v[prox][i_pAN] / df_sum_rho.loc[prox, "n_pair"]
-            temp_v -= dic_pAN_v[prox] * temp_r  # TODO: support overlapping prox
+        #         for prox in res_prox_list:
+        #             temp_r = dic_pAN_v[prox][i_pAN] / df_sum_rho.loc[prox, "n_pair"]
+        #             temp_v -= dic_pAN_v[prox] * temp_r  # TODO: support overlapping prox
+        for sub_prox in dic_prox_n_pair:  # non-overlapping prox
+            temp_r = dic_prox_v[sub_prox][i_pAN] / dic_prox_n_pair[sub_prox]
+            temp_v -= dic_prox_v[sub_prox] * temp_r 
 
         df_sum_rho.loc[pAN, "ecov"] = (temp_v * v_coef_jn).sum()
         df_sum_rho.loc[pAN, "ecov_se"] = np.sqrt(temp_v.dot(mat_cov).dot(temp_v))
@@ -651,6 +698,7 @@ def summarize(
         "tau": df_sum_tau,
         "rho": df_sum_rho,
         "prox_list": res_prox_list,
+        "sub_prox_list": list(dic_prox_v),
         "dic_jn": dic_jn,
     }
 
