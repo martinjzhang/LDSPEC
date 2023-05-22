@@ -7,7 +7,7 @@ import pgenlib as pg
 import os
 import re
 import warnings
-import gdreg
+import ldspec
 import psutil
 from sys import getsizeof
 import time
@@ -27,7 +27,7 @@ def sample_mvn(mat_cov, random_seed=None, verbose=False):
     v_w, mat_v = np.linalg.eigh(mat_cov)
     ind_select = v_w > 0
     if verbose:
-        print("Call: gdreg.util.sample_mvn")
+        print("Call: ldspec.util.sample_mvn")
         tot_var = np.absolute(v_w).sum()
         pos_var = v_w[v_w > 0].sum()
         print(
@@ -130,15 +130,15 @@ def meta_analysis(effects, se, method="random", weights=None):
 
 def ldspec_meta(res_tau_list, res_rho_list, term, row, weights=None):
     """
-    LD-SPEC meta-analysis. 
+    LD-SPEC meta-analysis.
     - tau,h2,h2s,rho,cov,ecov : mean,se,p obtained by meta-analyzing `term / h2`
-    - h2_enrich : mean,se obtained by meta-analyzing `term`, p obtained by meta-analyzing 
+    - h2_enrich : mean,se obtained by meta-analyzing `term`, p obtained by meta-analyzing
         `h2(c) / M(c) - [h2(maf) - h2(c)] / [M(maf) - M(c)]` (not implemented)
-    - h2_shrink : mean,se obtained by meta-analyzing `term`, p obtained by meta-analyzing 
+    - h2_shrink : mean,se obtained by meta-analyzing `term`, p obtained by meta-analyzing
         `h2(c) - h2s(c)`
     - cor : mean,se obtained by meta-analyzing `term`, p obtained by meta-analyzing `cov`
     - ecor : mean,se obtained by meta-analyzing `term`, p obtained by meta-analyzing `ecov`
-    
+
     Parameters
     ----------
     res_tau_list : list of DataFrame
@@ -146,80 +146,99 @@ def ldspec_meta(res_tau_list, res_rho_list, term, row, weights=None):
     res_rho_list : list of DataFrame
         List of LD-SPEC rho DataFrame across traits.
     term : string
-        One of `tau`, `h2`, `h2s`, `h2_enrich`, `h2_shrink`, `rho`, `cov`, `cor`, 
+        One of `tau`, `h2`, `h2s`, `h2_enrich`, `h2_shrink`, `rho`, `cov`, `cor`,
         `ecov`, `ecor`.
     row : string
         One row (annotation) in the corresponding result DataFrame.
     weights : np.ndarray (list-like), default=None
-        Meta-analysis weights. If not specified, weights are equal to 1 / h2_se^2. 
-    
+        Meta-analysis weights. If not specified, weights are equal to 1 / h2_se^2.
+
     Returns
     -------
     meta_mean,meta_se,meta_p : floats
-        Meta-analyzed mean, se, p    
-        
+        Meta-analyzed mean, se, p
+
     Todo
     ----
     - h2_enrich p not implemented
     """
-    v_h2 = np.array([x.loc['AN:all', 'h2'] for x in res_tau_list], dtype=np.float32)
-    v_h2_se = np.array([x.loc['AN:all', 'h2_se'] for x in res_tau_list], dtype=np.float32)
-#     if weights is None: # weights
-#         weights = 1 / v_h2_se**2
-    
-    if term in ['tau', 'h2', 'h2s']:
-        # mean,se,p: meta-analyzing `term/h2` 
+    v_h2 = np.array([x.loc["AN:all", "h2"] for x in res_tau_list], dtype=np.float32)
+    v_h2_se = np.array(
+        [x.loc["AN:all", "h2_se"] for x in res_tau_list], dtype=np.float32
+    )
+    #     if weights is None: # weights
+    #         weights = 1 / v_h2_se**2
+
+    if term in ["tau", "h2", "h2s"]:
+        # mean,se,p: meta-analyzing `term/h2`
         v_mean = np.array([x.loc[row, term] for x in res_tau_list], dtype=np.float32)
-        v_se = np.array([x.loc[row, '%s_se'%term] for x in res_tau_list], dtype=np.float32)
-        meta_mean,meta_se = meta_analysis(v_mean/v_h2, v_se/v_h2, weights=weights)
-        meta_p = zsc2pval(meta_mean / meta_se) 
-    elif term in ['rho', 'cov', 'ecov']:
-        # mean,se,p: meta-analyzing `term/h2` 
+        v_se = np.array(
+            [x.loc[row, "%s_se" % term] for x in res_tau_list], dtype=np.float32
+        )
+        meta_mean, meta_se = meta_analysis(v_mean / v_h2, v_se / v_h2, weights=weights)
+        meta_p = zsc2pval(meta_mean / meta_se)
+    elif term in ["rho", "cov", "ecov"]:
+        # mean,se,p: meta-analyzing `term/h2`
         v_mean = np.array([x.loc[row, term] for x in res_rho_list], dtype=np.float32)
-        v_se = np.array([x.loc[row, '%s_se'%term] for x in res_rho_list], dtype=np.float32)
-        meta_mean,meta_se = meta_analysis(v_mean/v_h2, v_se/v_h2, weights=weights)
-        meta_p = zsc2pval(meta_mean / meta_se) 
-    elif term in ['h2_enrich']:
-        # mean,se,p: meta-analyzing `term` 
+        v_se = np.array(
+            [x.loc[row, "%s_se" % term] for x in res_rho_list], dtype=np.float32
+        )
+        meta_mean, meta_se = meta_analysis(v_mean / v_h2, v_se / v_h2, weights=weights)
+        meta_p = zsc2pval(meta_mean / meta_se)
+    elif term in ["h2_enrich"]:
+        # mean,se,p: meta-analyzing `term`
         v_mean = np.array([x.loc[row, term] for x in res_tau_list], dtype=np.float32)
-        v_se = np.array([x.loc[row, '%s_se'%term] for x in res_tau_list], dtype=np.float32)
-        meta_mean,meta_se = meta_analysis(v_mean, v_se, weights=weights)
-        meta_p = zsc2pval( (meta_mean-1) / meta_se) 
-    elif term == 'h2_shrink':
-        # mean,se: meta-analyzing `term` 
+        v_se = np.array(
+            [x.loc[row, "%s_se" % term] for x in res_tau_list], dtype=np.float32
+        )
+        meta_mean, meta_se = meta_analysis(v_mean, v_se, weights=weights)
+        meta_p = zsc2pval((meta_mean - 1) / meta_se)
+    elif term == "h2_shrink":
+        # mean,se: meta-analyzing `term`
         v_mean = np.array([x.loc[row, term] for x in res_tau_list], dtype=np.float32)
-        v_se = np.array([x.loc[row, '%s_se'%term] for x in res_tau_list], dtype=np.float32)
-        meta_mean,meta_se = meta_analysis(v_mean, v_se, weights=weights)
+        v_se = np.array(
+            [x.loc[row, "%s_se" % term] for x in res_tau_list], dtype=np.float32
+        )
+        meta_mean, meta_se = meta_analysis(v_mean, v_se, weights=weights)
         # p: meta-analyzing `h2(c) - h2s(c)`
-        mean_list = [x.loc[row, 'h2'] - x.loc[row, 'h2s'] for x in res_tau_list]
-        z_list = [zsc2pval(x.loc[row, 'h2_shrink_p'], option='two-sided') for x in res_tau_list]
-        se_list = [x/y for x,y in zip(mean_list, z_list)]
-        temp_mean,temp_se = meta_analysis(np.array(mean_list)/v_h2, np.array(se_list)/v_h2, weights=weights)
-        meta_p = zsc2pval(temp_mean / temp_se) 
-    elif term == 'cor':
-        # mean,se: meta-analyzing `term` 
+        mean_list = [x.loc[row, "h2"] - x.loc[row, "h2s"] for x in res_tau_list]
+        z_list = [
+            zsc2pval(x.loc[row, "h2_shrink_p"], option="two-sided")
+            for x in res_tau_list
+        ]
+        se_list = [x / y for x, y in zip(mean_list, z_list)]
+        temp_mean, temp_se = meta_analysis(
+            np.array(mean_list) / v_h2, np.array(se_list) / v_h2, weights=weights
+        )
+        meta_p = zsc2pval(temp_mean / temp_se)
+    elif term == "cor":
+        # mean,se: meta-analyzing `term`
         v_mean = np.array([x.loc[row, term] for x in res_rho_list], dtype=np.float32)
-        v_se = np.array([x.loc[row, '%s_se'%term] for x in res_rho_list], dtype=np.float32)
-        meta_mean,meta_se = meta_analysis(v_mean, v_se, weights=weights)
+        v_se = np.array(
+            [x.loc[row, "%s_se" % term] for x in res_rho_list], dtype=np.float32
+        )
+        meta_mean, meta_se = meta_analysis(v_mean, v_se, weights=weights)
         # p: meta-analyzing `cov`
-        v_mean = np.array([x.loc[row, 'cov'] for x in res_rho_list], dtype=np.float32)
-        v_se = np.array([x.loc[row, 'cov_se'] for x in res_rho_list], dtype=np.float32)
-        temp_mean,temp_se = meta_analysis(v_mean/v_h2, v_se/v_h2, weights=weights)
-        meta_p = zsc2pval(temp_mean / temp_se) 
-    elif term == 'ecor':
-        # mean,se: meta-analyzing `term` 
+        v_mean = np.array([x.loc[row, "cov"] for x in res_rho_list], dtype=np.float32)
+        v_se = np.array([x.loc[row, "cov_se"] for x in res_rho_list], dtype=np.float32)
+        temp_mean, temp_se = meta_analysis(v_mean / v_h2, v_se / v_h2, weights=weights)
+        meta_p = zsc2pval(temp_mean / temp_se)
+    elif term == "ecor":
+        # mean,se: meta-analyzing `term`
         v_mean = np.array([x.loc[row, term] for x in res_rho_list], dtype=np.float32)
-        v_se = np.array([x.loc[row, '%s_se'%term] for x in res_rho_list], dtype=np.float32)
-        meta_mean,meta_se = meta_analysis(v_mean, v_se, weights=weights)
+        v_se = np.array(
+            [x.loc[row, "%s_se" % term] for x in res_rho_list], dtype=np.float32
+        )
+        meta_mean, meta_se = meta_analysis(v_mean, v_se, weights=weights)
         # p: meta-analyzing `ecov`
-        v_mean = np.array([x.loc[row, 'ecov'] for x in res_rho_list], dtype=np.float32)
-        v_se = np.array([x.loc[row, 'ecov_se'] for x in res_rho_list], dtype=np.float32)
-        temp_mean,temp_se = meta_analysis(v_mean/v_h2, v_se/v_h2, weights=weights)
-        meta_p = zsc2pval(temp_mean / temp_se) 
+        v_mean = np.array([x.loc[row, "ecov"] for x in res_rho_list], dtype=np.float32)
+        v_se = np.array([x.loc[row, "ecov_se"] for x in res_rho_list], dtype=np.float32)
+        temp_mean, temp_se = meta_analysis(v_mean / v_h2, v_se / v_h2, weights=weights)
+        meta_p = zsc2pval(temp_mean / temp_se)
     else:
         raise ValueError("term '%s' not supported" % term)
-        
-    return meta_mean,meta_se,meta_p
+
+    return meta_mean, meta_se, meta_p
 
 
 def zsc2pval(zsc, option="two-sided"):
@@ -231,8 +250,8 @@ def zsc2pval(zsc, option="two-sided"):
         return sp.stats.norm.cdf(-zsc)  # This is more accurate
     if option == "two-sided":
         return sp.stats.norm.cdf(-np.absolute(zsc)) * 2
-    
-    
+
+
 def pval2zsc(pval, option="two-sided"):
     """
     Convert p-value to a positive z-score. Accurate up to `zsc=36` and `pval=4.2e-284`.
@@ -240,7 +259,8 @@ def pval2zsc(pval, option="two-sided"):
     if option == "one-sided":
         return -sp.stats.norm.ppf(pval)
     if option == "two-sided":
-        return -sp.stats.norm.ppf(pval/2)
+        return -sp.stats.norm.ppf(pval / 2)
+
 
 # def pval2zsc(pval):
 #     """
@@ -272,7 +292,7 @@ def pval2zsc(pval, option="two-sided"):
 #     meta_mean,meta_se = meta_analysis(np.array(mean_list), np.array(se_list), weights=np.ones(len(mean_list)))
 # #     meta_mean,meta_se = meta_analysis(np.array(mean_list), np.array(se_list))
 #     meta_z = meta_mean / meta_se
-#     meta_p = zsc2pval(meta_z) 
+#     meta_p = zsc2pval(meta_z)
 #     return meta_mean,meta_se,meta_z,meta_p
 
 
@@ -582,7 +602,7 @@ def get_n_sharp_line(fpath):
 
 def update_columns(col_list):
     """
-    Update columns to a set of standardized names
+    Update columns to a set of standard names
 
     Parameters
     ----------
@@ -983,8 +1003,8 @@ def get_mbin(maf):
 ################################################################################
 def get_cli_head():
     MASTHEAD = "******************************************************************************\n"
-    MASTHEAD += "* Gene-level directional effect regression (GDREG)\n"
-    MASTHEAD += "* Version %s\n" % gdreg.__version__
+    MASTHEAD += "* LD-score SNP-pair effect correlation regression (LD-SPEC)\n"
+    MASTHEAD += "* Version %s\n" % ldspec.__version__
     MASTHEAD += "* Martin Jinye Zhang\n"
     MASTHEAD += "* HSPH / Broad Institute\n"
     MASTHEAD += "* MIT License\n"

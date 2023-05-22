@@ -3,7 +3,7 @@ import scipy as sp
 import pandas as pd
 import pgenlib as pg
 import time
-import gdreg
+import ldspec
 import warnings
 
 
@@ -19,12 +19,10 @@ def compute_ld(
     Parameters
     ----------
     dic_data : dict
-        Genotype data reader, organized, for each CHR, as
-
+        Genotype data reader. Must contain all CHRs.
         - dic_data[CHR]['pgen'] : .pgen file path
         - dic_data[CHR]['pvar'] : .pvar pd.DataFrame
         - dic_data[CHR]['psam'] : .psam pd.DataFrame
-
     pos_tar,pos_ref : list of int
         Genomic range of SNPs of format [CHR, ind_start, ind_end].
 
@@ -56,7 +54,6 @@ def compute_ld(
     # block_size_tar, block_size_ref, block_size_sample
     block_size_tar = n_snp_tar
     block_size_ref = 1000
-    #     block_size_sample = 8191 # 32767/4
     block_size_sample = 10000  # 32767/4
 
     n_block_tar = np.ceil(n_snp_tar / block_size_tar).astype(int)
@@ -66,7 +63,7 @@ def compute_ld(
     n_block_sample = np.ceil(n_sample / block_size_sample).astype(int)
 
     if verbose:
-        print("# Call: gdreg.score.compute_ld")
+        print("# Call: ldspec.score.compute_ld")
         print(
             "    n_snp_tar=%d (CHR%d), n_snp_ref=%d (CHR%d), n_sample=%d"
             % (n_snp_tar, CHR_tar, n_snp_ref, CHR_ref, n_sample)
@@ -83,7 +80,6 @@ def compute_ld(
     reader_ref = pg.PgenReader(bytes(dic_data[CHR_ref]["pgen"], encoding="utf8"))
 
     # Compute LD matrix
-    #     mat_ld = np.zeros([n_snp_ref, n_snp_tar], dtype=int)
     mat_ld = np.zeros([n_snp_ref, n_snp_tar], dtype=float)
     v_maf_tar, v_maf_ref = [], []
 
@@ -92,8 +88,6 @@ def compute_ld(
         end_tar = min(ind_s_tar + (i_tar + 1) * block_size_tar, ind_e_tar)
         mat_X_tar = np.empty([end_tar - start_tar, n_sample], np.int8)
         reader_tar.read_range(start_tar, end_tar, mat_X_tar)
-        #         mat_X_tar[mat_X_tar == -9] = 0
-        #         v_maf_tar.extend(mat_X_tar.mean(axis=1) * 0.5)  # np.float64
         v_missing = (mat_X_tar == -9).sum(axis=1)  # Imputation by mean genotype
         v_maf_tar_block = (
             0.5 * (mat_X_tar.sum(axis=1) + 9 * v_missing) / (n_sample - v_missing)
@@ -104,9 +98,6 @@ def compute_ld(
         for i_sample in range(n_block_sample):
             ind_s = i_sample * block_size_sample
             ind_e = (i_sample + 1) * block_size_sample
-            #             mat_list_tar.append(
-            #                 sp.sparse.csr_matrix(mat_X_tar[:, ind_s:ind_e].T, dtype=np.int16)
-            #             )
             temp_mat = sp.sparse.csr_matrix(
                 mat_X_tar[:, ind_s:ind_e].T, dtype=np.float32
             )
@@ -119,21 +110,16 @@ def compute_ld(
             end_ref = min(ind_s_ref + (i_ref + 1) * block_size_ref, ind_e_ref)
             mat_X_ref = np.empty([end_ref - start_ref, n_sample], np.int8)
             reader_ref.read_range(start_ref, end_ref, mat_X_ref)
-            #             mat_X_ref[mat_X_ref == -9] = 0
             v_missing = (mat_X_ref == -9).sum(axis=1)  # Imputation by mean genotype
             v_maf_ref_block = (
                 0.5 * (mat_X_ref.sum(axis=1) + 9 * v_missing) / (n_sample - v_missing)
             )
             if i_tar == 0:
-                #                 v_maf_ref.extend(mat_X_ref.mean(axis=1) * 0.5)  # np.float64
                 v_maf_ref.extend(v_maf_ref_block)  # np.float64
 
             for i_sample in range(n_block_sample):
                 ind_s = i_sample * block_size_sample
                 ind_e = (i_sample + 1) * block_size_sample
-                #                 temp_mat = sp.sparse.csr_matrix(
-                #                     mat_X_ref[:, ind_s:ind_e].T, dtype=np.int16
-                #                 )
                 temp_mat = sp.sparse.csr_matrix(
                     mat_X_ref[:, ind_s:ind_e].T, dtype=np.float32
                 )
@@ -180,14 +166,14 @@ def compute_avgr(
 
     Parameters
     ----------
-    dic_pannot_path : dic of dic of strs
-        File path for SNP-pair annotation. dic_pannot_path[annot_name][CHR] contains the
-        `.pannot_mat.npz` file path for annotation pAN and and CHR `CHR`. Dimension of the
-        sparse matrix should match `dic_data[CHR][pvar]`.
-    dic_ld_path : dic of dic of strs
+    dic_pannot_path : dict of dict of strs
+        File path for SNP-pair annotations. `dic_pannot_path[annot_name][CHR]` contains the
+        `.pannot_mat.npz` file path for annotation `annot_name` and `CHR`. Dimension of the
+        sparse matrix must match `dic_data[CHR]['pvar']`.
+    dic_ld_path : dict of dict of strs
         File path for LD matrices of shape (n_snp_ref, n_snp_tar), in csc format.
-        dic_ld_path[CHR] contains the list of LD files for CHR `CHR`. Dimension of the
-        sparse matrix should match `dic_data[CHR][pvar]`.
+        dic_ld_path[CHR] contains the list of LD files for `CHR`. Dimension of the
+        sparse matrix should match `dic_data[CHR]['pvar']`.
 
     Returns
     -------
@@ -196,22 +182,21 @@ def compute_avgr(
     """
     start_time = time.time()
     np.random.seed(0)
-
     pAN_list = list(dic_pannot_path)
     dic_sumr = {x: 0 for x in pAN_list}
     dic_n = {x: 0 for x in pAN_list}
-
     for CHR in dic_ld_path:
         if verbose:
-            print("CHR%2d (%d LD files)" % (CHR, len(dic_ld_path[CHR])))
+            print("CHR%d (%d LD files)" % (CHR, len(dic_ld_path[CHR])))
         dic_mat_G_chr = {}
         for pAN in pAN_list:
-            dic_mat_G_chr[pAN] = gdreg.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
+            dic_mat_G_chr[pAN] = ldspec.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
 
+        p_thresold = 5 / len(dic_ld_path[CHR])
         for i, ld_file in enumerate(dic_ld_path[CHR]):
-            if np.random.rand(1)[0] > 0.2:
+            if np.random.rand(1)[0] > p_thresold:
                 continue
-            mat_ld, dic_range = gdreg.util.read_ld(ld_file)
+            mat_ld, dic_range = ldspec.util.read_ld(ld_file)
             mat_ld.data[np.isnan(mat_ld.data)] = 0
             for pAN in pAN_list:
                 temp_mat_G = dic_mat_G_chr[pAN][
@@ -237,48 +222,49 @@ def compute_score(
     dic_pannot_path={},
     snp_range=None,
     flag_cross_term=False,
-    win_size=int(1e7),
+    win_size=int(1e6),
     verbose=False,
 ):
 
     """
-    Compute LD for all annots and DLD scores for all pannots.
+    Compute LD/DLD scores for annots/pannots. If `snp_range` is given, compute scores for
+    SNPs in the range. Otherwise, compute scores for all SNPs on CHRs which with both
+    `dic_data[CHR]` and `dic_ld[CHR]`.
 
     Parameters
     ----------
     dic_data : dict
-        Genotype data reader. Must contain SNPs from all chromosomes.
-
+        Genotype data reader. Must contain all CHRs.
         - dic_data[CHR]['pgen'] : .pgen file path
         - dic_data[CHR]['pvar'] : .pvar pd.DataFrame
         - dic_data[CHR]['psam'] : .psam pd.DataFrame
-
     dic_ld : dict of sp.sparse.csc_matrix(dtype=np.float32)
-        dic_mat_ld[CHR] for LD matrix of chromosome CHR of shape (n_snp_chr, n_snp_chr).
-        The j-th column contains all LDs of SNP j within a 1e7 window (5e6 on each side).
-        If `snp_range` is given, only columns within `snp_range` need to have true values.
-        Others can be padded with zeros.
-    dic_annot_path : dic of dic of strs
-        File path for single-SNP annotation. dic_annot_path[annot_name][CHR] contains the
-        `.annot.gz` file path for annot_file `annot_name` and CHR `CHR`.
-    dic_pannot_path : dic of dic of strs
-        File path for SNP-pair annotation. dic_pannot_path[annot_name][CHR] contains the
-        `.pannot_mat.npz` file path for annotation pAN and and CHR `CHR`. Dimension of the
-        sparse matrix should match `dic_data[CHR][pvar]`.
+        dic_ld[CHR] contains the signed LD matrix (r) for CHR with shape (n_snp_chr, n_snp_chr).
+        The j-th column of dic_ld[CHR] contains the signed LD between SNP j and all other SNPs on the CHR.
+        Only values within `win_size` of SNP j will be used (`win_size/2` on each side).
+        If `snp_range` is given, columns specified by `snp_range` will be used and other columns can
+        be filled with zero.
+    dic_annot_path : dict of dict of strs
+        File path for single-SNP annotations. `dic_annot_path[annot_name][CHR]` contains the
+        `.annot.gz` file path for `annot_name` and `CHR`.
+    dic_pannot_path : dict of dict of strs
+        File path for SNP-pair annotations. `dic_pannot_path[annot_name][CHR]` contains the
+        `.pannot_mat.npz` file path for annotation `annot_name` and `CHR`. Dimension of the
+        sparse matrix must match `dic_data[CHR]['pvar']`.
     snp_range : list of int
-        Genomic range of SNPs for computing the scores. (CHR,ind_start,ind_end).
-        If provide, only only scores for this range.
+        SNP range of the format `(CHR, ind_start, ind_end)`.
+        If provided, only compute scores for SNPs in this range.
     flag_cross_term : bool, default=False
         If True, also compute scores for cross terms (Z_i Z_j) for SNP pairs i,j within 10000 SNPs
-        and covered by at least one pannot.
-    win_size : int, defualt=1e7
-        Window size for computing LD and DLD scores.
+        and covered by at least one pannot. Not tested.
+    win_size : int, defualt=1e6
+        Window size.
 
     Returns
     -------
     df_score : pd.DataFrame
-        GDREG LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'LD:AN:name1', 'LD:AN:name2',
-        'LD:E', 'DLD:pAN:name1', 'DLD:pAN:name2', ...].
+        LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'E', 'LD:AN1', 'LD:AN2', ...,
+        'DLD:pAN1', 'DLD:pAN2', ...].
 
     TODO
     ----
@@ -288,43 +274,51 @@ def compute_score(
     start_time = time.time()
 
     # SNP info
-    CHR_list = sorted(dic_data)  # CHR_list contains all CHRs
+    CHR_list = sorted(set(dic_data) & set(dic_ld))
     for CHR in CHR_list:
-        if CHR not in dic_ld:
-            continue
-        assert dic_ld[CHR].shape[0] == dic_data[CHR]["pvar"].shape[0], (
-            "dic_ld does not match dimension of dic_data for CHR%d" % CHR
-        )
-    n_sample = dic_data[CHR_list[0]]["psam"].shape[0]
-    v_snp = []
-    for CHR in CHR_list:
-        v_snp.extend(dic_data[CHR]["pvar"]["SNP"])
+        # Check dic_ld
+        assert (
+            dic_ld[CHR].shape[0] == dic_ld[CHR].shape[1]
+        ), "dic_ld[%d] is not a squared matrix: %s" % (CHR, str(dic_ld[CHR].shape))
+        assert (
+            dic_ld[CHR].shape[0] == dic_data[CHR]["pvar"].shape[0]
+        ), "dic_ld[%d] does not match dimension of dic_data[%d]" % (CHR, CHR)
+        # Check dic_annot_path
+        for annot_name in dic_annot_path:
+            assert (
+                CHR in dic_annot_path[annot_name]
+            ), "`dic_annot_path['%s'][%d] missing`" % (annot_name, CHR)
+        # Check dic_pannot_path
+        for annot_name in dic_pannot_path:
+            assert (
+                CHR in dic_pannot_path[annot_name]
+            ), "`dic_pannot_path['%s'][%d] missing`" % (annot_name, CHR)
 
     # Annotation
     AN_list = []
     for annot_name in dic_annot_path:
-        CHR = list(dic_annot_path[annot_name])[0]
-        temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR], nrows=5)
+        temp_df = ldspec.util.read_annot(
+            dic_annot_path[annot_name][CHR_list[0]], nrows=5
+        )
         AN_list.extend([x for x in temp_df if x.startswith("AN:")])
     pAN_list = list(dic_pannot_path)
 
     if verbose:
-        print("# Call: gdreg.score.compute_score")
+        print("# Call: ldspec.score.compute_score")
         temp_str = ", ".join(
-            ["CHR%d (%d)" % (x, dic_data[x]["pvar"].shape[0]) for x in CHR_list]
+            ["CHR%d (%d SNPs)" % (x, dic_data[x]["pvar"].shape[0]) for x in CHR_list]
         )
-        print("    %d SNPs (%d CHRs): %s" % (len(v_snp), len(CHR_list), temp_str))
+        print("    CHRs in `dic_data` and `dic_ld`: %s" % (temp_str))
         if snp_range is not None:
             print("    Range: chr=%d, start=%d, end=%d " % snp_range)
-        print("    Annots : %s" % ", ".join(AN_list))
-        print("    Pannots : %s" % ", ".join(pAN_list))
+        print("    Annots: %s" % ", ".join(AN_list))
+        print("    Pannots: %s" % ", ".join(pAN_list))
         print("    win_size=%0.1fMB" % (win_size / 1e6))
 
     # Compute score
-#     block_size = 10000
     block_size = 1000
-    df_score = None
-    for CHR in CHR_list:
+    df_score_list = []
+    for CHR in CHR_list:  # Iterate over all CHRs, process one block a time
         if snp_range is not None:
             if CHR != snp_range[0]:
                 continue
@@ -338,23 +332,24 @@ def compute_score(
         n_snp_chr = v_snp_chr.shape[0]
         n_block_chr = np.ceil(n_snp_chr / block_size).astype(int)
 
-        # dic_annot_chr
+        # Read annots and pannots for CHR
         dic_annot_chr = {}
         for annot_name in dic_annot_path:
-            temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR])
+            temp_df = ldspec.util.read_annot(dic_annot_path[annot_name][CHR])
             for AN in [x for x in temp_df if x.startswith("AN:")]:
                 dic_annot_chr[AN] = {
                     x: y for x, y in zip(temp_df["SNP"], temp_df[AN]) if y != 0
                 }
-
-        # dic_mat_G_chr
         dic_mat_G_chr = {}
         for pAN in pAN_list:
-            dic_mat_G_chr[pAN] = gdreg.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
+            dic_mat_G_chr[pAN] = ldspec.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
 
         for i_block in range(n_block_chr):
             ind_s = i_block * block_size
             ind_e = min((i_block + 1) * block_size, n_snp_chr)
+            if snp_range is not None:
+                if (ind_s >= snp_range[2]) | (ind_e <= snp_range[1]):
+                    continue
             # Possible bug: dic_ld doesn't contain all values
             # between ind_s_ref and ind_e_ref due to block mismatch.
             # This should be minor though.
@@ -364,10 +359,6 @@ def compute_score(
             ind_e_ref = np.searchsorted(
                 v_bp_chr, v_bp_chr[ind_e - 1] + win_size / 2, side="right"
             )
-
-            if snp_range is not None:
-                if (ind_s >= snp_range[2]) | (ind_e <= snp_range[1]):
-                    continue
 
             # Basic info
             dic_score["CHR"].extend([CHR] * (ind_e - ind_s))
@@ -403,7 +394,7 @@ def compute_score(
                 v_score = (temp_mat_G.dot(mat_ld_block) * mat_ld_block).sum(axis=0)
                 dic_score["DLD:%s" % pAN].extend(v_score)
 
-            # Cross terms
+            # Cross terms (not tested)
             if flag_cross_term:
                 # ind_pair
                 v_snp_tar_block = list(v_snp_chr[ind_s:ind_e])
@@ -467,13 +458,10 @@ def compute_score(
                     col_list = [x[1] for x in ind_pair]
                     dic_score["DLD:%s" % pAN].extend(mat_score[(row_list, col_list)])
 
-        temp_df = pd.DataFrame(dic_score)
-        if df_score is None:
-            df_score = temp_df.copy()
-        else:
-            df_score = pd.concat([df_score, temp_df], axis=0)
+        df_score_list.append(pd.DataFrame(dic_score))
+    df_score = pd.concat(df_score_list, axis=0)
 
-    if snp_range is not None:
+    if snp_range is not None:  # Retain only SNPs in `snp_range`
         CHR, START, END = snp_range
         snp_set = set(dic_data[CHR]["pvar"]["SNP"].values[START:END])
         ind_select = [

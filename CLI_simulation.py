@@ -3,29 +3,27 @@ import numpy as np
 import time
 import os
 import argparse
-import gdreg
+import ldspec
 
 
 """
 Job description
 ----------------
 
-compute_eff : simulate and summerize SNP effects 
-    - Input : --pgen_file | --config_file | --annot_file | --prefix_out
-    - Output : list of snp ranges (in the format of "snp_range")
-
-compute_phen : compute .phen file
-    - Input : --job | --pgen_file | --config_file | --annot_file |  [--random_seed] | [--flag_full_ld]
-    - Output : LD matrix between a set of SNPs and all other SNPs on the same chromosome.
+simulate : simulate SNP effects, compute phenotype, summerize SNP effects, compute sumstats 
+    - Input : --job | --pgen_file | --config_file | --annot_file | --prefix_out | [--flag_bw_sparse] | [--random_seed]
+    - Output : 
+        SNP effect file `.eff.gz`
+        Phenotype file `.phen`
+        Summary statistics file `.sumstats.gz`
+        Effect summary file `.eff_tau.tsv` and `.eff_omega.tsv`
     
-compute_sumstats : compute .sumstats file
-    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--random_seed] 
-    | [--flag_cross_term]
-    - Output : LD and DLD scores.
+compute_sumstats : compute sumstats 
+    - Input : --job | --pgen_file | --phen_file ｜ --prefix_out
+    - Output : summary statistics file `.sumstats.gz`
     
 TODO
 ----
-- Add truth of "cov(ac;proxy)" and "cor(ac;proxy)"
 - 
 """
 
@@ -41,59 +39,53 @@ def main(args):
     PGEN_FILE = args.pgen_file
     CONFIG_FILE = args.config_file
     ANNOT_FILE = args.annot_file
-    EFF_FILE = args.eff_file
     PHEN_FILE = args.phen_file
     PREFIX_OUT = args.prefix_out
-    RANDOM_SEED = int(args.random_seed)
     FLAG_BW_SPARSE = bool(args.flag_bw_sparse)
+    RANDOM_SEED = int(args.random_seed)
 
     # Parse and check arguments
-    LEGAL_JOB_LIST = [
-        "simulate",
-        #         "compute_phen",
-        "compute_sumstats",
-    ]
-    err_msg = "# run_gdreg: --job=%s not supported" % JOB
+    LEGAL_JOB_LIST = ["simulate", "compute_sumstats"]
+    err_msg = "# CLI_simulation: --job=%s not supported" % JOB
     assert JOB in LEGAL_JOB_LIST, err_msg
 
     if (PHEN_FILE is None) & (JOB in ["compute_sumstats"]):
-        raise ValueError("# run_simulation.py: --phen_file required for --job=%s" % JOB)
+        raise ValueError("--phen_file required for --job=%s" % JOB)
 
     # Print input options
-    header = gdreg.util.get_cli_head()
-    header += "Call: run_simulation.py \\\n"
+    header = ldspec.util.get_cli_head()
+    header += "Call: CLI_simulation.py \\\n"
     header += "--job %s\\\n" % JOB
     header += "--pgen_file %s\\\n" % PGEN_FILE
     header += "--config_file %s\\\n" % CONFIG_FILE
     header += "--annot_file %s\\\n" % ANNOT_FILE
-    header += "--eff_file %s\\\n" % EFF_FILE
     header += "--phen_file %s\\\n" % PHEN_FILE
     header += "--prefix_out %s\\\n" % PREFIX_OUT
-    header += "--random_seed %d\\\n" % RANDOM_SEED
-    header += "--flag_bw_sparse %s\n" % FLAG_BW_SPARSE
+    header += "--flag_bw_sparse %s\\\n" % FLAG_BW_SPARSE
+    header += "--random_seed %d\n" % RANDOM_SEED
     print(header)
 
     ###########################################################################################
     ######                                   Data Loading                                ######
     ###########################################################################################
     # Load genotype data
-    if JOB in ["simulate", "compute_phen", "compute_sumstats"]:
+    if JOB in ["simulate", "compute_sumstats"]:
         print("# Loading --pgen_file")
         dic_data = {}
         if "@" not in PGEN_FILE:  # Load single CHR
-            temp_dic = gdreg.util.read_pgen(PGEN_FILE)
+            temp_dic = ldspec.util.read_pgen(PGEN_FILE)
             dic_data[temp_dic["pvar"]["CHR"][0]] = temp_dic.copy()
         else:
             for CHR in range(1, 23):  # Check all 23 CHRs
                 if os.path.exists(PGEN_FILE.replace("@", "%s" % CHR) + ".pgen"):
-                    dic_data[CHR] = gdreg.util.read_pgen(
+                    dic_data[CHR] = ldspec.util.read_pgen(
                         PGEN_FILE.replace("@", "%s" % CHR)
                     )
 
         for CHR in dic_data:
             n_sample = dic_data[CHR]["psam"].shape[0]
             n_snp = dic_data[CHR]["pvar"].shape[0]
-            mat_X = gdreg.util.read_geno(
+            mat_X = ldspec.util.read_geno(
                 dic_data[CHR]["pgen"], 0, 50, n_sample=None, n_snp=None
             )
             sparsity = (mat_X != 0).mean()
@@ -101,10 +93,10 @@ def main(args):
                 "    CHR%2d: %d samples, %d SNPs, %0.1f%% non-zeros for first 50 SNPs"
                 % (CHR, n_sample, n_snp, sparsity * 100)
             )
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
     # Load --annot_file (lazy loading)
-    if JOB in ["simulate", "compute_phen"]:
+    if JOB in ["simulate"]:
         print("# Loading --annot_file")
         dic_annot_path = {}
         dic_pannot_path = {}
@@ -132,7 +124,7 @@ def main(args):
             if annot_file.endswith((".annot.gz", ".pannot_mat.npz")) is False:
                 print("    Skip: %s" % annot_file)
                 continue
-            annot_name = gdreg.util.get_annot_name_from_file(annot_file)
+            annot_name = ldspec.util.get_annot_name_from_file(annot_file)
             if annot_file.endswith(".annot.gz"):
                 dic_annot_path[annot_name] = {}
                 for CHR in dic_data:
@@ -164,10 +156,10 @@ def main(args):
         for annot_name in dic_annot_path:
             CHR0 = list(CHR_set_annot)[0]
             col_list = list(
-                gdreg.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
+                ldspec.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
             )
             for CHR in CHR_set_annot:
-                temp_df = gdreg.util.read_annot(
+                temp_df = ldspec.util.read_annot(
                     dic_annot_path[annot_name][CHR], nrows=5
                 )
                 err_msg = "%s : columns mismatch between CHR%d and CHR%d" % (
@@ -183,7 +175,7 @@ def main(args):
         # Check: pannots have the same shape as pvar file
         for annot_name in dic_pannot_path:
             CHR = np.random.choice(list(CHR_set_annot), size=1)[0]
-            mat_G = gdreg.util.read_pannot_mat(dic_pannot_path[annot_name][CHR])
+            mat_G = ldspec.util.read_pannot_mat(dic_pannot_path[annot_name][CHR])
             err_msg = "(%s, CHR%d) : n_snp=%d, mismatch with --pgen_file" % (
                 annot_name,
                 CHR,
@@ -196,9 +188,9 @@ def main(args):
             )
 
     # Load config
-    if JOB in ["simulate", "compute_phen"]:
+    if JOB in ["simulate"]:
         print("# Loading --config_file")
-        temp_df = pd.read_csv(CONFIG_FILE, sep="\t", header=None)
+        temp_df = pd.read_csv(CONFIG_FILE, header=None, delim_whitespace=True)
         dic_config = {x: y for x, y in zip(temp_df[0], temp_df[1])}
         for col in ["h2g", "p_causal", "alpha"]:
             assert col in dic_config, "%s not in --config_file"
@@ -206,7 +198,7 @@ def main(args):
 
         AN_list, CHR0 = [], list(CHR_set_annot)[0]
         for annot_name in dic_annot_path:
-            temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
+            temp_df = ldspec.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
             AN_list.extend([x for x in temp_df if x.startswith("AN:")])
         pAN_list = list(dic_pannot_path)
 
@@ -221,30 +213,20 @@ def main(args):
 
         print("    %s" % ", ".join(["%s (%0.2f)" % (x, dic_coef[x]) for x in dic_coef]))
 
-    # Load EFF_FILE
-    if JOB in ["compute_phen"]:
-        print("# Loading --eff_file")
-        df_effect = pd.read_csv(EFF_FILE, sep="\t", index_col=None)
-        print(
-            "    %d SNPs, h2=%0.3f"
-            % (df_effect.shape[0], (df_effect["EFF"] ** 2).sum())
-        )
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
-
     # Load PHEN_FILE
     if JOB in ["compute_sumstats"]:
         print("# Loading --phen_file")
         df_phen = pd.read_csv(PHEN_FILE, sep="\t", index_col=None)
         phen_name = df_phen.columns[2]
         print("    %d samples, phen_name=%s" % (df_phen.shape[0], phen_name))
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
     ###########################################################################################
     ######                                  Computation                                  ######
     ###########################################################################################
     if JOB == "simulate":
         # Simulate SNP effects
-        df_effect = gdreg.simulate.simulate_snp_effect(
+        df_effect = ldspec.simulate.simulate_snp_effect(
             dic_data,
             dic_coef,
             dic_annot_path=dic_annot_path,
@@ -257,12 +239,10 @@ def main(args):
             random_seed=RANDOM_SEED,
             verbose=True,
         )
-        #         df_effect.to_csv(PREFIX_OUT + ".eff.gz", sep="\t", index=False)
-        #         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
         # Compute .phen
         df_effect_ = df_effect.copy()
-        df_phen = gdreg.simulate.simulate_phen(
+        df_phen = ldspec.simulate.simulate_phen(
             dic_data,
             dic_coef,
             df_effect_,
@@ -271,8 +251,6 @@ def main(args):
             random_seed=RANDOM_SEED + 42,
             verbose=True,
         )
-        #         df_phen.to_csv(PREFIX_OUT + ".phen", sep="\t", index=False)
-        #         print("    " + gdreg.util.get_sys_info(sys_start_time))
 
         # Scale df_phen and df_effect by SD(y), and save files
         scale_factor = 1 / df_phen["TRAIT"].std()
@@ -283,12 +261,12 @@ def main(args):
         df_effect["EFF"] = df_effect["EFF"] * scale_factor
         df_effect.to_csv(PREFIX_OUT + ".eff.gz", sep="\t", index=False)
         df_phen.to_csv(PREFIX_OUT + ".phen", sep="\t", index=False)
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
         # Summarize SNP effects
         df_effect_ = df_effect.copy()
         df_phen_ = df_phen.copy()
-        df_sum_tau, df_sum_rho = gdreg.simulate.summarize_snp_effect(
+        df_sum_tau, df_sum_omega = ldspec.simulate.summarize_snp_effect(
             dic_data,
             dic_coef,
             df_effect_,
@@ -299,46 +277,32 @@ def main(args):
             verbose=True,
         )
         df_sum_tau.to_csv(PREFIX_OUT + ".eff_tau.tsv", sep="\t", index=False)
-        df_sum_rho.to_csv(PREFIX_OUT + ".eff_rho.tsv", sep="\t", index=False)
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        df_sum_omega.to_csv(PREFIX_OUT + ".eff_omega.tsv", sep="\t", index=False)
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
         # Compute .sumstats
         df_phen_ = df_phen.copy()
-        df_sumstats = gdreg.simulate.compute_sumstats(
+        df_sumstats = ldspec.simulate.compute_sumstats(
             df_phen_, dic_data, block_size=500, verbose=True
         )
         df_sumstats.to_csv(PREFIX_OUT + ".sumstats.gz", sep="\t", index=False)
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
-
-    #     if JOB == "compute_phen":
-    #         df_phen = gdreg.simulate.simulate_phen(
-    #             dic_data,
-    #             dic_coef,
-    #             df_effect,
-    #             dic_annot_path=dic_annot_path,
-    #             block_size=500,
-    #             random_seed=RANDOM_SEED + 42,
-    #             verbose=True,
-    #         )
-    #         df_phen.to_csv(PREFIX_OUT + ".phen", sep="\t", index=False)
-    #         print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
     if JOB == "compute_sumstats":
-        df_sumstats = gdreg.simulate.compute_sumstats(
+        df_sumstats = ldspec.simulate.compute_sumstats(
             df_phen, dic_data, block_size=500, verbose=True
         )
         df_sumstats.to_csv(PREFIX_OUT + ".sumstats.gz", sep="\t", index=False)
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="gdreg")
+    parser = argparse.ArgumentParser(description="ldspec")
 
     parser.add_argument("--job", type=str, default="simulate")
     parser.add_argument("--pgen_file", type=str, required=True)
     parser.add_argument("--config_file", type=str, default=None)
     parser.add_argument("--annot_file", type=str, default=None)
-    parser.add_argument("--eff_file", type=str, default=None)
     parser.add_argument("--phen_file", type=str, default=None)
     parser.add_argument("--prefix_out", type=str, required=True)
     parser.add_argument("--flag_bw_sparse", type=bool, default=False)

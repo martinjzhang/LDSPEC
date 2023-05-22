@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 import pandas as pd
 import time
-import gdreg
+import ldspec
 import warnings
 
 
@@ -26,36 +26,31 @@ def simulate_snp_effect(
     Parameters
     ----------
     dic_data : dict
-        Genotype data reader. Must contain SNPs from all chromosomes.
-
+        Genotype data reader. Must contain all CHRs.
         - dic_data[CHR]['pgen'] : .pgen file path
         - dic_data[CHR]['pvar'] : .pvar pd.DataFrame
         - dic_data[CHR]['psam'] : .psam pd.DataFrame
         - dic_data[CHR]['afreq'] : .psam pd.DataFrame
-
     dic_coef : dic
-        GDREG model coefficients `tau` and `rho`. Should match annots in dic_annot_path
-        and pannots in dic_pannot_path
-
-        - dic[AN] : `tau` for AN `c` defined as
-            `Var(\beta_i) = \sum_c a_ci tau_c`
-        - dic[pAN] : `rho` for pAN `k` defined as
-            `Cov(\beta_i, \beta_j) = \sum_{k} G^{(k)}_{ij} \rho_k`
-
-    dic_annot_path : dic of dic of strs
-        File path for single-SNP annotation. dic_annot_path[annot_name][CHR] contains the
-        `.annot.gz` file path for annot_file `annot_name` and CHR `CHR`.
-    dic_pannot_path : dic of dic of strs
-        File path for SNP-pair annotation. dic_pannot_path[annot_name][CHR] contains the
-        `.pannot_mat.npz` file path for annotation pAN and and CHR `CHR`. Dimension of the
-        sparse matrix should match `dic_data[CHR][pvar]`.
+        LDSPEC model coefficients `tau` and `omega`. Should match annots in `dic_annot_path`
+        and pannots in `dic_pannot_path`.
+        - dic[AN] : `tau` for AN `c` defined as `Var(\beta_i) = \sum_c a_ci tau_c`
+        - dic[pAN] : `omega` for pAN `k` defined as `Cov(\beta_i, \beta_j) = \sum_{k} G^{(k)}_{ij} \omega_k`
+        `AN:summary_common` and `AN:summary_lf` reserved for common, lf h2_enrichment.
+    dic_annot_path : dict of dict of strs
+        File path for single-SNP annotations. `dic_annot_path[annot_name][CHR]` contains the
+        `.annot.gz` file path for `annot_name` and `CHR`.
+    dic_pannot_path : dict of dict of strs
+        File path for SNP-pair annotations. `dic_pannot_path[annot_name][CHR]` contains the
+        `.pannot_mat.npz` file path for annotation `annot_name` and `CHR`. Dimension of the
+        sparse matrix must match `dic_data[CHR]['pvar']`.
     h2g : float, default=0.5
         Overall heritability, equal to `sum(effect**2)`.
     alpha : float, default=-0.38
         Parameter for maf-dependent architecture,
         `Var(beta_j) \propto [maf (1-maf)]^(1+\alpha)`,
-        where `\beta_j` is the standardized SNP effect size. `alpha=-1` means there
-        is no maf-dependency. Schoech et al. NC 2019 suggestsed alpha=-0.38.
+        where `\beta_j` is the standardized SNP effect size. `alpha=-1` means no MAF-dependency.
+        Schoech et al. NC 2019 suggested alpha=-0.38.
     p_causal : float, default=0.2
         Proportion of causal SNPs.
     block_size : int, default=100
@@ -68,7 +63,6 @@ def simulate_snp_effect(
     -------
     df_effect: pd.DataFrame
         Simulated SNP effects, with columns ['CHR', 'SNP', 'MAF', 'EFF'].
-
     """
 
     np.random.seed(random_seed)
@@ -80,7 +74,7 @@ def simulate_snp_effect(
 
     temp_list, CHR0 = [], CHR_list[0]
     for annot_name in dic_annot_path:
-        temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
+        temp_df = ldspec.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
         temp_list.extend(temp_df)
     for AN in AN_list:
         if AN not in temp_list:
@@ -90,7 +84,7 @@ def simulate_snp_effect(
             raise ValueError("%s not in dic_pannot_path" % pAN)
 
     if verbose:
-        print("# Call: gdreg.simulate.simulate_snp_effect")
+        print("# Call: ldspec.simulate.simulate_snp_effect")
         print("    h2g=%0.2f, alpha=%0.2f, p_causal=%0.2f" % (h2g, alpha, p_causal))
         print("    block_size=%d, flag_bw_sparse=%s" % (block_size, flag_bw_sparse))
         print(
@@ -113,7 +107,7 @@ def simulate_snp_effect(
         df_effect_chr["EFF"] = 0
 
         for annot_name in dic_annot_path:
-            temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR])
+            temp_df = ldspec.util.read_annot(dic_annot_path[annot_name][CHR])
             for AN in AN_list:
                 if AN in temp_df:
                     temp_dic = {
@@ -154,7 +148,7 @@ def simulate_snp_effect(
         # Read pannot file
         dic_mat_G_chr = {}
         for pAN in pAN_list:
-            dic_mat_G_chr[pAN] = gdreg.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
+            dic_mat_G_chr[pAN] = ldspec.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
 
         # Simulate SNP causal effects one block at a time
         n_block_chr = int(np.ceil(n_snp_chr / block_size))
@@ -162,7 +156,7 @@ def simulate_snp_effect(
         for i in range(n_block_chr):
             if i % 100 == 0:
                 print(
-                    "    CHR%2d block %d/%d, time=%0.1fs"
+                    "    CHR%d block %d/%d, time=%0.1fs"
                     % (CHR, i, n_block_chr, time.time() - start_time)
                 )
 
@@ -187,12 +181,9 @@ def simulate_snp_effect(
             mat_cov = (mat_cov * v_sd_block).T * v_sd_block
 
             # Sample effects
-            # df_effect_chr.loc[ind_block, "EFF"] = gdreg.util.sample_mvn(
-            #     mat_cov, random_seed=random_seed + i + 500 * CHR
-            # )
             ind_select = np.diag(mat_cov) > 0
             temp_v = np.zeros(n_snp_block, dtype=np.float32)
-            temp_v[ind_select] = gdreg.util.sample_mvn(
+            temp_v[ind_select] = ldspec.util.sample_mvn(
                 mat_cov[ind_select, :][:, ind_select]
             )
             # # Sanity check: only for diagonal elements
@@ -225,7 +216,6 @@ def summarize_snp_effect(
     dic_data,
     dic_coef,
     df_effect,
-    #     df_phen,
     df_phen=None,
     dic_annot_path={},
     dic_pannot_path={},
@@ -239,33 +229,28 @@ def summarize_snp_effect(
     Parameters
     ----------
     dic_data : dict
-        Genotype data reader. Must contain SNPs from all chromosomes.
-
+        Genotype data reader. Must contain all CHRs.
         - dic_data[CHR]['pgen'] : .pgen file path
         - dic_data[CHR]['pvar'] : .pvar pd.DataFrame
         - dic_data[CHR]['psam'] : .psam pd.DataFrame
         - dic_data[CHR]['afreq'] : .psam pd.DataFrame
 
     dic_coef : dic
-        GDREG model coefficients `tau` and `rho`. Should match annots in dic_annot_path
-        and pannots in dic_pannot_path
-
-        - dic[AN] : `tau` for AN `c` defined as
-            `Var(\beta_i) = \sum_c a_ci tau_c`
-        - dic[pAN] : `rho` for pAN `k` defined as
-            `Cov(\beta_i, \beta_j) = \sum_{k} G^{(k)}_{ij} \rho_k`
+        LDSPEC model coefficients `tau` and `omega`. Should match annots in `dic_annot_path`
+        and pannots in `dic_pannot_path`.
+        - dic[AN] : `tau` for AN `c` defined as `Var(\beta_i) = \sum_c a_ci tau_c`
+        - dic[pAN] : `omega` for pAN `k` defined as `Cov(\beta_i, \beta_j) = \sum_{k} G^{(k)}_{ij} \omega_k`
+        `AN:summary_common` and `AN:summary_lf` reserved for common, lf h2_enrichment.
 
     df_effect : pd.DataFrame
         Simulated SNP effects. Must contain ['CHR', 'SNP', 'BP', 'EFF'] columns.
-    df_phen : pd.DataFrame, default=None
-        Simulated phenotypes, with columns ['FID', 'IID', 'TRAIT'].
-    dic_annot_path : dic of dic of strs
-        File path for single-SNP annotation. dic_annot_path[annot_name][CHR] contains the
-        `.annot.gz` file path for annot_file `annot_name` and CHR `CHR`.
-    dic_pannot_path : dic of dic of strs
-        File path for SNP-pair annotation. dic_pannot_path[annot_name][CHR] contains the
-        `.pannot_mat.npz` file path for annotation pAN and and CHR `CHR`. Dimension of the
-        sparse matrix should match `dic_data[CHR][pvar]`.
+    dic_annot_path : dict of dict of strs
+        File path for single-SNP annotations. `dic_annot_path[annot_name][CHR]` contains the
+        `.annot.gz` file path for `annot_name` and `CHR`.
+    dic_pannot_path : dict of dict of strs
+        File path for SNP-pair annotations. `dic_pannot_path[annot_name][CHR]` contains the
+        `.pannot_mat.npz` file path for annotation `annot_name` and `CHR`. Dimension of the
+        sparse matrix must match `dic_data[CHR]['pvar']`.
     block_size : int, default=1000
         Maximum number of SNPs to simulate at a time.
 
@@ -273,10 +258,10 @@ def summarize_snp_effect(
     -------
     df_sum_tau : pd.DataFrame
         Summary of single-SNP results. One annotation per row including columns
-        ['annot', 'n_snp', 'p_causal', 'tau']
-    df_sum_rho : pd.DataFrame
+        ['annot', 'n_snp', 'p_causal', 'tau', 'h2', 'h2_enrich']
+    df_sum_omega : pd.DataFrame
         Summary of SNP-pair results. One annotation per row including columns
-        ['pannot', 'n_pair', 'p_causal', 'rho', 'cov', 'cor']
+        ['pannot', 'n_pair', 'p_causal', 'omega', 'cov', 'cor', 'ecov', 'ecor']
     """
 
     start_time = time.time()
@@ -286,10 +271,10 @@ def summarize_snp_effect(
     AN_list = [x for x in dic_coef if x.startswith("AN:")]
     pAN_list = [x for x in dic_coef if x.startswith("pAN:")]
     dic_eff = {x: y for x, y in zip(df_effect["SNP"], df_effect["EFF"])}
-    prox_list = [x for x in pAN_list if "prox" in x]  # pAN's for priximity
+    prox_list = [x for x in pAN_list if "prox" in x]  # pAN's for proximity
 
     if verbose:
-        print("# Call: gdreg.simulate.summarize_snp_effect")
+        print("# Call: ldspec.simulate.summarize_snp_effect")
         print(
             "    annots: %s"
             % ", ".join(["%s (%0.2f)" % (x, dic_coef[x]) for x in AN_list])
@@ -313,13 +298,13 @@ def summarize_snp_effect(
         },
     )
 
-    df_sum_rho = pd.DataFrame(
+    df_sum_omega = pd.DataFrame(
         index=pAN_list,
         data={
             "pannot": pAN_list,
             "n_pair": 0,
             "p_causal": 0,
-            "rho": np.nan,
+            "omega": np.nan,
             "cov": 0,
             "cor": 0,
             "ecov": 0,
@@ -336,14 +321,16 @@ def summarize_snp_effect(
 
         # Read annot file
         for annot_name in dic_annot_path:
-            temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR])
+            temp_df = ldspec.util.read_annot(dic_annot_path[annot_name][CHR])
             ref_col_list = [x for x in temp_df if x.endswith("_common")]
-            temp_df["AN:all_common"] = (temp_df[ref_col_list].values == 1).sum(
+            temp_df["AN:summary_common"] = (temp_df[ref_col_list].values == 1).sum(
                 axis=1
             ) > 0
             ref_col_list = [x for x in temp_df if x.endswith("_lf")]
-            temp_df["AN:all_lf"] = (temp_df[ref_col_list].values == 1).sum(axis=1) > 0
-            for AN in AN_list + ["AN:all_lf", "AN:all_common"]:
+            temp_df["AN:summary_lf"] = (temp_df[ref_col_list].values == 1).sum(
+                axis=1
+            ) > 0
+            for AN in AN_list + ["AN:summary_lf", "AN:summary_common"]:
                 if AN in temp_df:
                     temp_dic = {
                         x: y for x, y in zip(temp_df["SNP"], temp_df[AN]) if y != 0
@@ -352,24 +339,24 @@ def summarize_snp_effect(
                         temp_dic[x] if x in temp_dic else 0 for x in df_snp_chr["SNP"]
                     ]
 
-        for col in ["EFF"] + AN_list + ["AN:all_lf", "AN:all_common"]:
+        for col in ["EFF"] + AN_list + ["AN:summary_lf", "AN:summary_common"]:
             df_snp_chr[col] = df_snp_chr[col].astype(np.float32)
         df_list.append(df_snp_chr.copy())
 
     df_snp = pd.concat(df_list, axis=0)
     v_y = df_snp["EFF"].values ** 2
     mat_X = df_snp[AN_list].values
-    df_sum_tau["tau"] = gdreg.util.reg(v_y, mat_X)
+    df_sum_tau["tau"] = ldspec.util.reg(v_y, mat_X)
     df_sum_tau["n_snp"] = [(df_snp[x] == 1).sum() for x in AN_list]
     df_sum_tau["p_causal"] = [
         (df_snp.loc[df_snp[x] == 1, "EFF"] != 0).mean() for x in AN_list
     ]
 
     if df_phen is not None:
-        h2_common = df_phen["AN:all_common"].var() / df_phen["TRAIT"].var()
-        h2_common_ps = h2_common / (df_snp["AN:all_common"] == 1).sum()
-        h2_lf = df_phen["AN:all_lf"].var() / df_phen["TRAIT"].var()
-        h2_lf_ps = h2_lf / (df_snp["AN:all_lf"] == 1).sum()
+        h2_common = df_phen["AN:summary_common"].var() / df_phen["TRAIT"].var()
+        h2_common_ps = h2_common / max((df_snp["AN:summary_common"] == 1).sum(), 1)
+        h2_lf = df_phen["AN:summary_lf"].var() / df_phen["TRAIT"].var()
+        h2_lf_ps = h2_lf / max((df_snp["AN:summary_lf"] == 1).sum(), 1)
         for AN in AN_list:
             df_sum_tau.loc[AN, "h2"] = df_phen[AN].var() / df_phen["TRAIT"].var()
             h2ps = df_sum_tau.loc[AN, "h2"] / df_sum_tau.loc[AN, "n_snp"]
@@ -400,17 +387,17 @@ def summarize_snp_effect(
         # Read pannot file
         dic_mat_G_chr = {}
         for pAN in pAN_list:
-            dic_mat_G_chr[pAN] = gdreg.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
-            df_sum_rho.loc[pAN, "n_pair"] += dic_mat_G_chr[pAN].sum()
+            dic_mat_G_chr[pAN] = ldspec.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
+            df_sum_omega.loc[pAN, "n_pair"] += dic_mat_G_chr[pAN].sum()
 
             v_eff_b = (df_snp_chr["EFF"].values != 0) * 1
-            df_sum_rho.loc[pAN, "p_causal"] += (
+            df_sum_omega.loc[pAN, "p_causal"] += (
                 dic_mat_G_chr[pAN].dot(v_eff_b).T.dot(v_eff_b)
             )
 
             v_eff = df_snp_chr["EFF"].values
-            df_sum_rho.loc[pAN, "cov"] += dic_mat_G_chr[pAN].dot(v_eff).T.dot(v_eff)
-            df_sum_rho.loc[pAN, "cor"] += (
+            df_sum_omega.loc[pAN, "cov"] += dic_mat_G_chr[pAN].dot(v_eff).T.dot(v_eff)
+            df_sum_omega.loc[pAN, "cor"] += (
                 dic_mat_G_chr[pAN].dot(v_h2ps_chr).T.dot(v_h2ps_chr)
             )
 
@@ -445,22 +432,22 @@ def summarize_snp_effect(
             df_list.append(temp_df.copy())
 
     df_reg = pd.concat(df_list, axis=0)
-    df_sum_rho["rho"] = gdreg.util.reg(df_reg["beta_ij"], df_reg[pAN_list])
-    df_sum_rho["p_causal"] = df_sum_rho["p_causal"] / df_sum_rho["n_pair"]
-    df_sum_rho["ecov"] = df_sum_rho["cov"]
+    df_sum_omega["omega"] = ldspec.util.reg(df_reg["beta_ij"], df_reg[pAN_list])
+    df_sum_omega["p_causal"] = df_sum_omega["p_causal"] / df_sum_omega["n_pair"]
+    df_sum_omega["ecov"] = df_sum_omega["cov"]
     for pAN in pAN_list:
         for prox in prox_list:
-            temp_r = dic_overlap[pAN][prox] / df_sum_rho.loc[prox, "n_pair"]
-            df_sum_rho.loc[pAN, "ecov"] -= temp_r * df_sum_rho.loc[prox, "cov"]
-    temp_v = df_sum_rho["cor"].values.copy()
-    df_sum_rho["cor"] = df_sum_rho["cov"] / temp_v
-    df_sum_rho["ecor"] = df_sum_rho["ecov"] / temp_v
+            temp_r = dic_overlap[pAN][prox] / df_sum_omega.loc[prox, "n_pair"]
+            df_sum_omega.loc[pAN, "ecov"] -= temp_r * df_sum_omega.loc[prox, "cov"]
+    temp_v = df_sum_omega["cor"].values.copy()
+    df_sum_omega["cor"] = df_sum_omega["cov"] / temp_v
+    df_sum_omega["ecor"] = df_sum_omega["ecov"] / temp_v
 
     if verbose:
         print(df_sum_tau)
-        print(df_sum_rho)
+        print(df_sum_omega)
         print("    Completed, time=%0.1fs" % (time.time() - start_time))
-    return df_sum_tau, df_sum_rho
+    return df_sum_tau, df_sum_omega
 
 
 def simulate_phen(
@@ -477,25 +464,20 @@ def simulate_phen(
     Parameters
     ----------
     dic_data : dict
-        Genotype data reader. Must contain SNPs from all chromosomes.
-
+        Genotype data reader. Must contain all CHRs.
         - dic_data[CHR]['pgen'] : .pgen file path
         - dic_data[CHR]['pvar'] : .pvar pd.DataFrame
         - dic_data[CHR]['psam'] : .psam pd.DataFrame
         - dic_data[CHR]['afreq'] : .psam pd.DataFrame
-
     dic_coef : dic
-        GDREG model coefficients `tau` and `rho`. Should match annots in dic_annot_path
-        and pannots in dic_pannot_path
-
-        - dic[AN] : `tau` for AN `c` defined as
-            `Var(\beta_i) = \sum_c a_ci tau_c`
-        - dic[pAN] : `rho` for pAN `k` defined as
-            `Cov(\beta_i, \beta_j) = \sum_{k} G^{(k)}_{ij} \rho_k`
-
+        LDSPEC model coefficients `tau` and `omega`. Should match annots in `dic_annot_path`
+        and pannots in `dic_pannot_path`.
+        - dic[AN] : `tau` for AN `c` defined as `Var(\beta_i) = \sum_c a_ci tau_c`
+        - dic[pAN] : `omega` for pAN `k` defined as `Cov(\beta_i, \beta_j) = \sum_{k} G^{(k)}_{ij} \omega_k`
+        `AN:summary_common` and `AN:summary_lf` reserved for common, lf h2_enrichment.
     df_effect : pd.DataFrame
         Simulated SNP effects. Must contain ['CHR', 'SNP', 'BP', 'EFF'] columns.
-    dic_annot_path : dic of dic of strs
+    dic_annot_path : dic of dic of strs, , default={}
         File path for single-SNP annotation. dic_annot_path[annot_name][CHR] contains the
         `.annot.gz` file path for annot_file `annot_name` and CHR `CHR`.
     block_size : int, default=500
@@ -527,7 +509,7 @@ def simulate_phen(
     h2e = 1 - h2g
 
     if verbose:
-        print("# Call: gdreg.simulate.simulate_phen")
+        print("# Call: ldspec.simulate.simulate_phen")
         print(
             "    %d samples, %d SNPs (%d in df_effect)"
             % (len(fid_list), len(snp_list), len(set(snp_list) & set(df_effect["SNP"])))
@@ -542,7 +524,7 @@ def simulate_phen(
             "IID": iid_list,
         },
     )
-    for AN in ["TRAIT"] + AN_list + ["AN:all_common", "AN:all_lf"]:
+    for AN in ["TRAIT"] + AN_list + ["AN:summary_common", "AN:summary_lf"]:
         df_phen[AN] = 0
         df_phen[AN] = df_phen[AN].astype(np.float32)
 
@@ -552,14 +534,16 @@ def simulate_phen(
         n_snp_chr = df_snp_chr.shape[0]
 
         for annot_name in dic_annot_path:
-            temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR])
+            temp_df = ldspec.util.read_annot(dic_annot_path[annot_name][CHR])
             ref_col_list = [x for x in temp_df if x.endswith("_common")]
-            temp_df["AN:all_common"] = (temp_df[ref_col_list].values == 1).sum(
+            temp_df["AN:summary_common"] = (temp_df[ref_col_list].values == 1).sum(
                 axis=1
             ) > 0
             ref_col_list = [x for x in temp_df if x.endswith("_lf")]
-            temp_df["AN:all_lf"] = (temp_df[ref_col_list].values == 1).sum(axis=1) > 0
-            for AN in AN_list + ["AN:all_common", "AN:all_lf"]:
+            temp_df["AN:summary_lf"] = (temp_df[ref_col_list].values == 1).sum(
+                axis=1
+            ) > 0
+            for AN in AN_list + ["AN:summary_common", "AN:summary_lf"]:
                 if AN in temp_df:
                     temp_dic = {
                         x: y for x, y in zip(temp_df["SNP"], temp_df[AN]) if y != 0
@@ -568,7 +552,7 @@ def simulate_phen(
                         temp_dic[x] if x in temp_dic else 0 for x in df_snp_chr["SNP"]
                     ]
 
-        for col in AN_list + ["AN:all_common", "AN:all_lf"]:
+        for col in AN_list + ["AN:summary_common", "AN:summary_lf"]:
             df_snp_chr[col] = df_snp_chr[col].astype(np.float32)
 
         n_block_chr = int(np.ceil(n_snp_chr / block_size))
@@ -577,20 +561,18 @@ def simulate_phen(
         for i in range(n_block_chr):
             ind_start = i * block_size_chr
             ind_end = min((i + 1) * block_size_chr, n_snp_chr)
-            mat_X = gdreg.util.read_geno(dic_data[CHR]["pgen"], ind_start, ind_end)
+            mat_X = ldspec.util.read_geno(dic_data[CHR]["pgen"], ind_start, ind_end)
             v_snp_block = dic_data[CHR]["pvar"]["SNP"].values[ind_start:ind_end]
             v_eff = np.array([dic_eff[x] if x in dic_eff else 0 for x in v_snp_block])
 
             mat_X = mat_X.T.astype(np.float32)
             mat_X[mat_X == -9] = np.nan  # Imputation by mean genotype
             v_maf = np.nanmean(mat_X, axis=0) * 0.5  # Imputation by mean genotype
-            #             mat_X[mat_X == -9] = 0
-            #             v_maf = mat_X.mean(axis=0) * 0.5
             mat_X = (mat_X - 2 * v_maf) / np.sqrt(2 * v_maf * (1 - v_maf))
             mat_X[np.isnan(mat_X)] = 0
 
             df_phen["TRAIT"] += mat_X.dot(v_eff)
-            for AN in AN_list + ["AN:all_common", "AN:all_lf"]:
+            for AN in AN_list + ["AN:summary_common", "AN:summary_lf"]:
                 ind_AN = df_snp_chr[AN][ind_start:ind_end] == 1
                 if ind_AN.sum() == 0:
                     continue
@@ -603,7 +585,7 @@ def simulate_phen(
                 )
 
     df_phen["TRAIT"] += np.random.randn(df_phen.shape[0]) * np.sqrt(h2e)
-    for col in ["TRAIT"] + AN_list + ["AN:all_common", "AN:all_lf"]:
+    for col in ["TRAIT"] + AN_list + ["AN:summary_common", "AN:summary_lf"]:
         df_phen[col] = df_phen[col].astype(np.float32)
 
     if verbose:
@@ -621,13 +603,11 @@ def compute_sumstats(df_phen, dic_data, block_size=500, verbose=False):
     df_phen : pd.DataFrame
         Simulated phenotypes, with columns ['FID', 'IID', 'TRAIT'].
     dic_data : dict
-        Genotype data reader. Must contain SNPs from all chromosomes.
-
+        Genotype data reader. Must contain all CHRs.
         - dic_data[CHR]['pgen'] : .pgen file path
         - dic_data[CHR]['pvar'] : .pvar pd.DataFrame
         - dic_data[CHR]['psam'] : .psam pd.DataFrame
         - dic_data[CHR]['afreq'] : .psam pd.DataFrame
-
     block_size : int, default=500
         Maximum number of SNPs to simulate at a time.
 
@@ -658,7 +638,7 @@ def compute_sumstats(df_phen, dic_data, block_size=500, verbose=False):
     sample_set_common = set(dic_phen.keys()) & set(sample_list)
 
     if verbose:
-        print("# Call: gdreg.simulate.compute_sumstats")
+        print("# Call: ldspec.simulate.compute_sumstats")
         print("    dic_data: %d CHRs" % len(CHR_list))
         print("    dic_data: %d SNPs" % len(snp_list))
         print("    dic_data: %d samples" % len(sample_list))
@@ -690,7 +670,7 @@ def compute_sumstats(df_phen, dic_data, block_size=500, verbose=False):
         for i in range(n_block_chr):
             ind_start = i * block_size_chr
             ind_end = min((i + 1) * block_size_chr, n_snp_chr)
-            mat_X = gdreg.util.read_geno(dic_data[CHR]["pgen"], ind_start, ind_end)
+            mat_X = ldspec.util.read_geno(dic_data[CHR]["pgen"], ind_start, ind_end)
 
             mat_X = mat_X[:, ind_sample].copy()
             mat_X = mat_X.T.astype(np.float32)
