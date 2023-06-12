@@ -48,17 +48,24 @@
 # Convert to ancestral alleles (chimp): directly converting to pgen
 # CHROM=$SLURM_ARRAY_TASK_ID
 
-CHROM=1
-REF_FILE=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/snp_info/ukb_imp_chr${CHROM}_v3_aa.pvar
-OUTPUT_PATH=/n/scratch3/users/j/jz286/imp_geno_chimp
-# plink2_a37 \
-#     --pfile /n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3\
-#     --ref-allele ${REF_FILE} 10 3\
-#     --make-pgen \
-#     --out ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
-#     && rm ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp.log
+CHROM=22
+# REF_FILE=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/snp_info/ukb_imp_chr${CHROM}_v3_aa.pvar
+# OUTPUT_PATH=/n/scratch3/users/j/jz286/imp_geno_chimp
+# # plink2_a37 \
+# #     --pfile /n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3\
+# #     --ref-allele ${REF_FILE} 10 3\
+# #     --make-pgen \
+# #     --out ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
+# #     && rm ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp.log
 
-plink2_a37 \
+# plink2_a37 \
+#     --pfile ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
+#     --freq --out ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
+#         && rm ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp.log
+        
+# Update CM 
+plink \
     --pfile ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
-    --freq --out ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
+    --update-cm 
+    --out ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
         && rm ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp.log

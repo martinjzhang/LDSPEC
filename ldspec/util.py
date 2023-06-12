@@ -128,10 +128,10 @@ def meta_analysis(effects, se, method="random", weights=None):
     return summary, se_summary
 
 
-def ldspec_meta(res_tau_list, res_rho_list, term, row, weights=None):
+def ldspec_meta(res_tau_list, res_omega_list, term, row, weights=None):
     """
     LD-SPEC meta-analysis.
-    - tau,h2,h2s,rho,cov,ecov : mean,se,p obtained by meta-analyzing `term / h2`
+    - tau,h2,h2s,omega,cov,ecov : mean,se,p obtained by meta-analyzing `term / h2`
     - h2_enrich : mean,se obtained by meta-analyzing `term`, p obtained by meta-analyzing
         `h2(c) / M(c) - [h2(maf) - h2(c)] / [M(maf) - M(c)]` (not implemented)
     - h2_shrink : mean,se obtained by meta-analyzing `term`, p obtained by meta-analyzing
@@ -143,10 +143,10 @@ def ldspec_meta(res_tau_list, res_rho_list, term, row, weights=None):
     ----------
     res_tau_list : list of DataFrame
         List of LD-SPEC tau DataFrame across traits.
-    res_rho_list : list of DataFrame
-        List of LD-SPEC rho DataFrame across traits.
+    res_omega_list : list of DataFrame
+        List of LD-SPEC omega DataFrame across traits.
     term : string
-        One of `tau`, `h2`, `h2s`, `h2_enrich`, `h2_shrink`, `rho`, `cov`, `cor`,
+        One of `tau`, `h2`, `h2s`, `h2_enrich`, `h2_shrink`, `omega`, `cov`, `cor`,
         `ecov`, `ecor`.
     row : string
         One row (annotation) in the corresponding result DataFrame.
@@ -177,11 +177,11 @@ def ldspec_meta(res_tau_list, res_rho_list, term, row, weights=None):
         )
         meta_mean, meta_se = meta_analysis(v_mean / v_h2, v_se / v_h2, weights=weights)
         meta_p = zsc2pval(meta_mean / meta_se)
-    elif term in ["rho", "cov", "ecov"]:
+    elif term in ["omega", "cov", "ecov"]:
         # mean,se,p: meta-analyzing `term/h2`
-        v_mean = np.array([x.loc[row, term] for x in res_rho_list], dtype=np.float32)
+        v_mean = np.array([x.loc[row, term] for x in res_omega_list], dtype=np.float32)
         v_se = np.array(
-            [x.loc[row, "%s_se" % term] for x in res_rho_list], dtype=np.float32
+            [x.loc[row, "%s_se" % term] for x in res_omega_list], dtype=np.float32
         )
         meta_mean, meta_se = meta_analysis(v_mean / v_h2, v_se / v_h2, weights=weights)
         meta_p = zsc2pval(meta_mean / meta_se)
@@ -213,26 +213,26 @@ def ldspec_meta(res_tau_list, res_rho_list, term, row, weights=None):
         meta_p = zsc2pval(temp_mean / temp_se)
     elif term == "cor":
         # mean,se: meta-analyzing `term`
-        v_mean = np.array([x.loc[row, term] for x in res_rho_list], dtype=np.float32)
+        v_mean = np.array([x.loc[row, term] for x in res_omega_list], dtype=np.float32)
         v_se = np.array(
-            [x.loc[row, "%s_se" % term] for x in res_rho_list], dtype=np.float32
+            [x.loc[row, "%s_se" % term] for x in res_omega_list], dtype=np.float32
         )
         meta_mean, meta_se = meta_analysis(v_mean, v_se, weights=weights)
         # p: meta-analyzing `cov`
-        v_mean = np.array([x.loc[row, "cov"] for x in res_rho_list], dtype=np.float32)
-        v_se = np.array([x.loc[row, "cov_se"] for x in res_rho_list], dtype=np.float32)
+        v_mean = np.array([x.loc[row, "cov"] for x in res_omega_list], dtype=np.float32)
+        v_se = np.array([x.loc[row, "cov_se"] for x in res_omega_list], dtype=np.float32)
         temp_mean, temp_se = meta_analysis(v_mean / v_h2, v_se / v_h2, weights=weights)
         meta_p = zsc2pval(temp_mean / temp_se)
     elif term == "ecor":
         # mean,se: meta-analyzing `term`
-        v_mean = np.array([x.loc[row, term] for x in res_rho_list], dtype=np.float32)
+        v_mean = np.array([x.loc[row, term] for x in res_omega_list], dtype=np.float32)
         v_se = np.array(
-            [x.loc[row, "%s_se" % term] for x in res_rho_list], dtype=np.float32
+            [x.loc[row, "%s_se" % term] for x in res_omega_list], dtype=np.float32
         )
         meta_mean, meta_se = meta_analysis(v_mean, v_se, weights=weights)
         # p: meta-analyzing `ecov`
-        v_mean = np.array([x.loc[row, "ecov"] for x in res_rho_list], dtype=np.float32)
-        v_se = np.array([x.loc[row, "ecov_se"] for x in res_rho_list], dtype=np.float32)
+        v_mean = np.array([x.loc[row, "ecov"] for x in res_omega_list], dtype=np.float32)
+        v_se = np.array([x.loc[row, "ecov_se"] for x in res_omega_list], dtype=np.float32)
         temp_mean, temp_se = meta_analysis(v_mean / v_h2, v_se / v_h2, weights=weights)
         meta_p = zsc2pval(temp_mean / temp_se)
     else:

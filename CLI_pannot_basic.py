@@ -42,16 +42,19 @@ def main(args):
     LD_UB = float(args.ld_ub)
     MAF_BIN_FILE = args.maf_bin_file
     MAF_RATIO_THRES = int(args.maf_ratio_thres)
+    FLAG_MAF_BLOCK = args.flag_maf_block
     OUT_PATH = args.out_path
 
     print("--pgen_file %s" % PGEN_FILE)
     print("--ld_file %s" % LD_FILE)
+    print("--snp_range_file %s" % SNP_RANGE_FILE)
     print("--dist_lb %s" % DIST_LB)
     print("--dist_ub %s" % DIST_UB)
     print("--ld_lb %s" % LD_LB)
     print("--ld_ub %s" % LD_UB)
     print("--maf_bin_file %s" % MAF_BIN_FILE)
     print("--maf_ratio_thres %s" % MAF_RATIO_THRES)
+    print("--flag_maf_block %s" % FLAG_MAF_BLOCK)
     print("--out_path %s" % OUT_PATH)
 
     # Data loading
@@ -76,6 +79,8 @@ def main(args):
         df_mbin = pd.read_csv(MAF_BIN_FILE, delim_whitespace=True, header=None)
     else:
         df_mbin = pd.DataFrame(data={0: ["all"], 1: [0], 2: [1]})
+    if FLAG_MAF_BLOCK:  # Disable MAF_RATIO_THRES
+        MAF_RATIO_THRES = 1e6
     print(df_mbin)
 
     # Computation
@@ -125,28 +130,47 @@ def main(args):
     for mbin, maf_lb, maf_ub in zip(df_mbin[0], df_mbin[1], df_mbin[2]):
         temp_snp_list1 = []
         temp_snp_list2 = []
-        for snp1, snp2 in zip(snp_list1, snp_list2):
-            mean_maf = np.sqrt(dic_maf[snp1] * dic_maf[snp2])
-            if (mean_maf >= maf_lb) & (mean_maf < maf_ub):
-                temp_snp_list1.append(snp1)
-                temp_snp_list2.append(snp2)
+        if FLAG_MAF_BLOCK:  # snps in the same MAF bin
+            for snp1, snp2 in zip(snp_list1, snp_list2):
+                if (
+                    (dic_maf[snp1] >= maf_lb)
+                    & (dic_maf[snp1] < maf_ub)
+                    & (dic_maf[snp2] >= maf_lb)
+                    & (dic_maf[snp2] < maf_ub)
+                ):
+                    temp_snp_list1.append(snp1)
+                    temp_snp_list2.append(snp2)
+        else:  # snps with geometric mean in the MAF bin
+            for snp1, snp2 in zip(snp_list1, snp_list2):
+                mean_maf = np.sqrt(dic_maf[snp1] * dic_maf[snp2])
+                if (mean_maf >= maf_lb) & (mean_maf < maf_ub):
+                    temp_snp_list1.append(snp1)
+                    temp_snp_list2.append(snp2)
 
         snp_pair_list = [(x, y) for x, y in zip(temp_snp_list1, temp_snp_list2)]
         if len(snp_pair_list) > 10:
+            str_prox = "proxy_%d_%d" % (DIST_LB, DIST_UB)            
             LDLB_str = (
                 "n%d" % (int(-LD_LB * 100)) if LD_LB < 0 else "p%d" % (int(LD_LB * 100))
             )
             LDUB_str = (
                 "n%d" % (int(-LD_UB * 100)) if LD_UB < 0 else "p%d" % (int(LD_UB * 100))
             )
-            file_name = "proxy_%d_%d.ld_%s_%s.maf_%s.c%d" % (
-                DIST_LB,
-                DIST_UB,
-                LDLB_str,
-                LDUB_str,
-                mbin,
-                CHR,
+            str_ld = (
+                "ld_full" if LD_FILE is None else "ld_%s_%s" % (LDLB_str, LDUB_str)
             )
+            str_maf = (
+                "maf_%s_block" % mbin if FLAG_MAF_BLOCK else "maf_%s_geomean" % mbin
+            )
+            file_name = "%s.%s.%s.c%d" % (str_prox, str_ld, str_maf, CHR)
+            #             file_name = "proxy_%d_%d%s.maf_%s_%s.c%d" % (
+            #                 DIST_LB,
+            #                 DIST_UB,
+            #                 '' if LD_FILE is None else '.ld_%s_%s' % (LDLB_str, LDUB_str)
+            #                 mbin,
+            #                 'block' if FLAG_MAF_BLOCK else 'geomean',
+            #                 CHR,
+            #             )
             print("%-50s" % file_name, "n_pair=%d" % len(snp_pair_list))
             ldspec.util.write_pannot_mat(
                 snp_pair_list, list(df_snp_chr["SNP"]), OUT_PATH + "/" + file_name
@@ -166,6 +190,7 @@ if __name__ == "__main__":
     parser.add_argument("--ld_ub", type=str, default="1", required=False)
     parser.add_argument("--maf_bin_file", type=str, default=None, required=False)
     parser.add_argument("--maf_ratio_thres", type=str, default="5", required=False)
+    parser.add_argument("--flag_maf_block", type=bool, default=True, required=False)
     parser.add_argument("--out_path", type=str, default=None, required=False)
 
     args = parser.parse_args()

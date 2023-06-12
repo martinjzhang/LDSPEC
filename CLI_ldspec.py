@@ -23,7 +23,7 @@ compute_ld : compute LD between target SNPs in `snp_range` and reference SNPs wi
     - Output : `_ld.npz` file; LD matrix.
     
 compute_score : compute LD and DLD scores.
-    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--flag_cross_term]
+    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--win_size] | [--flag_cross_term]
     - Output : `_score.tsv.gz` file; LD and DLD scores.
     
 combine_score : concatenate scores from the same CHR 
