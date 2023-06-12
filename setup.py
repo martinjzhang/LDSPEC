@@ -1,15 +1,15 @@
 import setuptools
 
-exec(open("gdreg/version.py").read())
+exec(open("ldspec/version.py").read())
 
 setuptools.setup(
-    name="gdreg",
+    name="ldspec",
     version=__version__,
-    description="Gene-level directional effect regression",
-    url="https://github.com/martinjzhang/GDReg",
+    description="LD-score SNP-pair effect correlation regression",
+    url="https://github.com/martinjzhang/LDSPEC",
     author="Martin Jinye Zhang",
     author_email="martinjzhang@gmail.com",
     license="MIT",
-    packages=["gdreg"],
+    packages=["ldspec"],
     zip_safe=False,
 )

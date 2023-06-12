@@ -7,41 +7,45 @@ import re
 import time
 import argparse
 import pickle
-import gdreg
+import ldspec
 
 
 """
 Job description
 ----------------
 
-get_snp_block : generate SNP blocks (10,000 SNPs per line)
+get_snp_block : create a list of SNP blocks (10,000 SNPs per block)
     - Input : --job | --pgen_file | --prefix_out
-    - Output : list of snp ranges (in the format of "snp_range")
+    - Output : one line per block in the `snp_range` format, e.g., `c1_s0_e10000`.
 
-compute_ld : compute LD matrix.
-    - Input : --job | --pgen_file | --prefix_out | --snp_range | [--random_seed] | [--flag_full_ld]
-    - Output : LD matrix between a set of SNPs and all other SNPs on the same chromosome.
+compute_ld : compute LD between target SNPs in `snp_range` and reference SNPs within `win_size` of target SNPs
+    - Input : --job | --pgen_file | --prefix_out | --snp_range | [--win_size]
+    - Output : `_ld.npz` file; LD matrix.
     
 compute_score : compute LD and DLD scores.
-    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--flag_cross_term]
-    - Output : LD and DLD scores.
+    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out | [--win_size] | [--flag_cross_term]
+    - Output : `_score.tsv.gz` file; LD and DLD scores.
+    
+combine_score : concatenate scores from the same CHR 
+    - Input : --score_file | --snp_range_file | --prefix_out
+    - Output : concatenated score files by CHR
     
 compute_avgr : compute average LD (avgr) for each pannot. "--ld_file" should contain all LD files
-    - Input : --job | --pgen_file | --prefix_out | --annot_file | --ld_file
-    - Output : Avg. LD for each pannot.
+    - Input : --job | --pgen_file | --ld_file | --annot_file | --prefix_out
+    - Output : Average LD for each pannot.
     
-regress : infer parameters \tau and \rho.
-    - Input : --job | --pgen_file | --score_file | --sumstats_file | --annot_file | --avgr_file
-    | --prefix_out | [--flag_cross_term]
-    - Output : GDREG result.
+regress : estimate LDSPEC parameters.
+    - Input : --job | --pgen_file | --annot_file  | --score_file | --sumstats_file| --avgr_file | --prefix_out |
+    [--flag_cross_term] | [--flag_nofil_snp]
+    - Output : LD-SPEC result.
     
 evaluate : model evaluation 
-    - Input : --job | --pgen_file | --sumstats_file | --annot_file | --avgr_file | --score_file | --null_model_file
+    - Input : --job | --pgen_file | --annot_file  | --score_file | --sumstats_file| --avgr_file | --null_model_file | 
+    --prefix_out | [--flag_cross_term] | [--flag_nofil_snp]
     - Output : model evaluation results.
     
 TODO
 ----
-- Double check file consistency 
 - 
 """
 
@@ -58,13 +62,13 @@ def main(args):
     LD_FILE = args.ld_file
     ANNOT_FILE = args.annot_file
     SCORE_FILE = args.score_file
+    SNP_RANGE_FILE = args.snp_range_file
     SUMSTATS_FILE = args.sumstats_file
     AVGR_FILE = args.avgr_file
     NULL_MODEL_FILE = args.null_model_file
     PREFIX_OUT = args.prefix_out
     SNP_RANGE = args.snp_range
     WIN_SIZE = int(float(args.win_size))
-    FLAG_FULL_LD = args.flag_full_ld
     FLAG_CROSS_TERM = args.flag_cross_term
     FLAG_NOFIL_SNP = args.flag_nofil_snp
 
@@ -73,46 +77,60 @@ def main(args):
         "get_snp_block",
         "compute_ld",
         "compute_score",
+        "combine_score",
         "compute_avgr",
         "regress",
         "evaluate",
     ]
-    err_msg = "# run_gdreg: --job=%s not supported" % JOB
+    err_msg = "# CLI_ldspec: --job=%s not supported" % JOB
+    assert JOB is not None, "--job required"
     assert JOB in LEGAL_JOB_LIST, err_msg
 
-    if JOB in ["get_snp_block", "compute_ld", "compute_score", "regress", "evaluate"]:
+    if JOB in [
+        "get_snp_block",
+        "compute_ld",
+        "compute_score",
+        "compute_avgr",
+        "regress",
+        "evaluate",
+    ]:
         assert PGEN_FILE is not None, "--pgen_file required for --job=%s" % JOB
     if JOB in ["compute_score", "compute_avgr"]:
         assert LD_FILE is not None, "--ld_file required for --job=%s" % JOB
-    if JOB in ["regress", "evaluate"]:
-        assert SCORE_FILE is not None, "--score_file required for --job=%s" % JOB
-    if JOB in ["regress", "evaluate"]:
-        assert SUMSTATS_FILE is not None, "--sumstats_file required for --job=%s" % JOB
     if JOB in ["compute_score", "compute_avgr", "regress", "evaluate"]:
         assert ANNOT_FILE is not None, "--annot_path_file required for --job=%s" % JOB
-    if JOB in ["compute_ld"]:
-        assert SNP_RANGE is not None, "--snp_range required for --job=%s" % JOB
-        DIC_RANGE = gdreg.util.parse_snp_range(SNP_RANGE)
+    if JOB in ["combine_score", "regress", "evaluate"]:
+        assert SCORE_FILE is not None, "--score_file required for --job=%s" % JOB
+    if JOB in ["combine_score"]:
+        assert SNP_RANGE_FILE is not None, (
+            "--snp_range_file required for --job=%s" % JOB
+        )
+    if JOB in ["regress", "evaluate"]:
+        assert SUMSTATS_FILE is not None, "--sumstats_file required for --job=%s" % JOB
     if JOB in ["evaluate"]:
         assert NULL_MODEL_FILE is not None, (
             "--null_model_file required for --job=%s" % JOB
         )
+    if JOB in ["compute_ld"]:
+        assert SNP_RANGE is not None, "--snp_range required for --job=%s" % JOB
+        DIC_RANGE = ldspec.util.parse_snp_range(SNP_RANGE)
+    assert PREFIX_OUT is not None, "--prefix_out required"
 
     # Print input options
-    header = gdreg.util.get_cli_head()
-    header += "Call: run_gdreg.py \\\n"
+    header = ldspec.util.get_cli_head()
+    header += "Call: CLI_ldspec.py \\\n"
     header += "--job %s\\\n" % JOB
     header += "--pgen_file %s\\\n" % PGEN_FILE
     header += "--ld_file %s\\\n" % LD_FILE
     header += "--annot_file %s\\\n" % ANNOT_FILE
     header += "--score_file %s\\\n" % SCORE_FILE
+    header += "--snp_range_file %s\\\n" % SNP_RANGE_FILE
     header += "--sumstats_file %s\\\n" % SUMSTATS_FILE
     header += "--avgr_file %s\\\n" % AVGR_FILE
     header += "--null_model_file %s\\\n" % NULL_MODEL_FILE
     header += "--prefix_out %s\\\n" % PREFIX_OUT
     header += "--snp_range %s\\\n" % SNP_RANGE
     header += "--win_size %s\\\n" % WIN_SIZE
-    header += "--flag_full_ld %s\\\n" % FLAG_FULL_LD
     header += "--flag_cross_term %s\\\n" % FLAG_CROSS_TERM
     header += "--flag_nofil_snp %s\n" % FLAG_NOFIL_SNP
     print(header)
@@ -132,19 +150,19 @@ def main(args):
         print("# Loading --pgen_file")
         dic_data = {}
         if "@" not in PGEN_FILE:  # Load single CHR
-            temp_dic = gdreg.util.read_pgen(PGEN_FILE)
+            temp_dic = ldspec.util.read_pgen(PGEN_FILE)
             dic_data[temp_dic["pvar"]["CHR"][0]] = temp_dic.copy()
         else:
             for CHR in range(1, 23):  # Check all 23 CHRs
                 if os.path.exists(PGEN_FILE.replace("@", "%s" % CHR) + ".pgen"):
-                    dic_data[CHR] = gdreg.util.read_pgen(
+                    dic_data[CHR] = ldspec.util.read_pgen(
                         PGEN_FILE.replace("@", "%s" % CHR)
                     )
 
         for CHR in dic_data:
             n_sample = dic_data[CHR]["psam"].shape[0]
             n_snp = dic_data[CHR]["pvar"].shape[0]
-            mat_X = gdreg.util.read_geno(
+            mat_X = ldspec.util.read_geno(
                 dic_data[CHR]["pgen"], 0, 50, n_sample=None, n_snp=None
             )
             sparsity = (mat_X != 0).mean()
@@ -152,15 +170,15 @@ def main(args):
                 "    CHR%2d: %d samples, %d SNPs, %0.1f%% non-zeros for first 50 SNPs"
                 % (CHR, n_sample, n_snp, sparsity * 100)
             )
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
-    # Load --ld_file (lazy)
+    # Load --ld_file (lazy loading)
     if JOB in ["compute_avgr"]:
         print("# Loading --ld_file (dic_ld_path)")
         dic_ld_path = {x: [] for x in dic_data}
-        for fpath in gdreg.util.from_filepattern(LD_FILE, sub="@"):
+        for fpath in ldspec.util.from_filepattern(LD_FILE, sub="@"):
             temp_str = [x for x in fpath.split(".") if x.endswith("_ld")][0]
-            dic_range = gdreg.util.parse_snp_range(temp_str)
+            dic_range = ldspec.util.parse_snp_range(temp_str)
             if dic_range["chr"] in dic_ld_path:  # Load only files for CHRs in dic_data
                 dic_ld_path[dic_range["chr"]].append(fpath)
             else:
@@ -172,7 +190,7 @@ def main(args):
     if JOB in ["compute_score"]:
         print("# Loading --ld_file (mat_ld)")
         assert os.path.exists(LD_FILE), "--ld_file does not exist"
-        mat_ld, dic_range = gdreg.util.read_ld(LD_FILE)
+        mat_ld, dic_range = ldspec.util.read_ld(LD_FILE)
         mat_ld.data[np.isnan(mat_ld.data)] = 0
         if dic_range["chr_ref"] is None:
             dic_range["chr_ref"] = dic_range["chr"]
@@ -189,14 +207,14 @@ def main(args):
         )
         print("    n_snp=%d, n_snp_ref=%d" % (mat_ld.shape[1], mat_ld.shape[0]))
         print("    LD info loaded, matching --pgen_file")
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
     # Load --sumstats_file
     if JOB in ["regress", "evaluate"]:
         print("# Loading --sumstats_file")
         df_sumstats = pd.read_csv(SUMSTATS_FILE, sep="\t", index_col=None)
         print("    .sumstats.gz loaded, %d SNPs" % df_sumstats.shape[0])
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
     # Load --annot_file (lazy loading)
     if JOB in ["compute_score", "compute_avgr", "regress", "evaluate"]:
@@ -227,7 +245,7 @@ def main(args):
             if annot_file.endswith((".annot.gz", ".pannot_mat.npz")) is False:
                 print("    Skip: %s" % annot_file)
                 continue
-            annot_name = gdreg.util.get_annot_name_from_file(annot_file)
+            annot_name = ldspec.util.get_annot_name_from_file(annot_file)
             if annot_file.endswith(".annot.gz"):
                 dic_annot_path[annot_name] = {}
                 for CHR in dic_data:
@@ -259,10 +277,10 @@ def main(args):
         for annot_name in dic_annot_path:
             CHR0 = list(CHR_set_annot)[0]
             col_list = list(
-                gdreg.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
+                ldspec.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
             )
             for CHR in CHR_set_annot:
-                temp_df = gdreg.util.read_annot(
+                temp_df = ldspec.util.read_annot(
                     dic_annot_path[annot_name][CHR], nrows=5
                 )
                 err_msg = "%s : columns mismatch between CHR%d and CHR%d" % (
@@ -278,7 +296,7 @@ def main(args):
         # Check: pannots have the same shape as pvar file
         for annot_name in dic_pannot_path:
             CHR = np.random.choice(list(CHR_set_annot), size=1)[0]
-            mat_G = gdreg.util.read_pannot_mat(dic_pannot_path[annot_name][CHR])
+            mat_G = ldspec.util.read_pannot_mat(dic_pannot_path[annot_name][CHR])
             err_msg = "(%s, CHR%d) : n_snp=%d, mismatch with --pgen_file" % (
                 annot_name,
                 CHR,
@@ -370,22 +388,9 @@ def main(args):
         # Check: if all scores have annots/pannots
         AN_list, CHR0 = [], list(CHR_set_annot)[0]
         for annot_name in dic_annot_path:
-            temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
+            temp_df = ldspec.util.read_annot(dic_annot_path[annot_name][CHR0], nrows=5)
             AN_list.extend([x for x in temp_df if x.startswith("AN:")])
         pAN_list = list(dic_pannot_path)
-
-        #         temp_list = list(set(AN_list_score) - set(AN_list))
-        #         err_msg = "%d scores without annots: %s" % (
-        #             len(temp_list),
-        #             ",".join(temp_list),
-        #         )
-        #         assert len(temp_list) == 0, err_msg
-        #         temp_list = list(set(pAN_list_score) - set(pAN_list))
-        #         err_msg = "%d scores without pannots: %s" % (
-        #             len(temp_list),
-        #             ",".join(temp_list),
-        #         )
-        #         assert len(temp_list) == 0, err_msg
 
         drop_list_LD = ["LD:%s" % x for x in set(AN_list_score) - set(AN_list)]
         drop_list_DLD = ["DLD:%s" % x for x in set(pAN_list_score) - set(pAN_list)]
@@ -429,7 +434,7 @@ def main(args):
         n_LD = len([x for x in df_score if x.startswith("LD:")])
         n_DLD = len([x for x in df_score if x.startswith("DLD:")])
         print("    Loaded: %d SNPs, %d LD scores, %d DLD scores" % (n_snp, n_LD, n_DLD))
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
     # Load --null_model_file
     if JOB in ["evaluate"]:
@@ -453,71 +458,51 @@ def main(args):
                 END = min((i + 1) * block_size, n_snp)
                 fout.write("c%d_s%d_e%d\n" % (CHR, START, END))
         fout.close()
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
     if JOB == "compute_ld":
         print("# Running --job compute_ld")
-        if FLAG_FULL_LD:
-            CHR, CHR_REF = DIC_RANGE["chr"], DIC_RANGE["chr_ref"][0]
-            pos_tar = [CHR, 0, dic_data[CHR]["pvar"].shape[0]]
-            pos_ref = [CHR_REF, 0, dic_data[CHR_REF]["pvar"].shape[0]]
-            mat_ld = gdreg.score.compute_ld(
-                dic_data,
-                pos_tar,
-                pos_ref,
-                verbose=True,
+        CHR, START, END = DIC_RANGE["chr"], DIC_RANGE["start"], DIC_RANGE["end"]
+        n_snp_tar, n_snp = (END - START), dic_data[CHR]["pvar"].shape[0]
+        v_bp = dic_data[CHR]["pvar"]["BP"].values
+
+        block_size = 1000
+        n_block = np.ceil(n_snp_tar / block_size).astype(int)
+        mat_ld_list = []
+        for i_block in range(n_block):
+            print(
+                "block %d/%d %s"
+                % (i_block, n_block, ldspec.util.get_sys_info(sys_start_time))
             )
-            np.save(PREFIX_OUT + ".c%s_r%s_fullld" % (CHR, CHR_REF), mat_ld)
-        else:
-            CHR, START, END = DIC_RANGE["chr"], DIC_RANGE["start"], DIC_RANGE["end"]
-            n_snp_tar, n_snp = (END - START), dic_data[CHR]["pvar"].shape[0]
-            v_bp = dic_data[CHR]["pvar"]["BP"].values
+            ind_s = START + i_block * block_size
+            ind_e = min(START + (i_block + 1) * block_size, END)
+            ind_s_ref = np.searchsorted(
+                v_bp, v_bp[ind_s] - 0.501 * WIN_SIZE, side="left"
+            )
+            ind_s_ref = max(0, ind_s_ref - 1)
+            ind_e_ref = np.searchsorted(
+                v_bp, v_bp[ind_e - 1] + 0.501 * WIN_SIZE, side="right"
+            )
+            ind_e_ref = min(n_snp, ind_e_ref + 1)
 
-            block_size = 1000
-            n_block = np.ceil(n_snp_tar / block_size).astype(int)
-            mat_ld_list = []
-            for i_block in range(n_block):
-                print(
-                    "block %d/%d %s"
-                    % (i_block, n_block, gdreg.util.get_sys_info(sys_start_time))
-                )
-                ind_s = START + i_block * block_size
-                ind_e = min(START + (i_block + 1) * block_size, END)
-                #                 ind_s_ref = np.searchsorted(v_bp, v_bp[ind_s] - 5.01e6, side="left")
-                ind_s_ref = np.searchsorted(
-                    v_bp, v_bp[ind_s] - 0.501 * WIN_SIZE, side="left"
-                )
-                ind_s_ref = max(0, ind_s_ref - 1)
-                #                 ind_e_ref = np.searchsorted(
-                #                     v_bp, v_bp[ind_e - 1] + 5.01e6, side="right"
-                #                 )
-                ind_e_ref = np.searchsorted(
-                    v_bp, v_bp[ind_e - 1] + 0.501 * WIN_SIZE, side="right"
-                )
-                ind_e_ref = min(n_snp, ind_e_ref + 1)
+            pos_tar = [CHR, ind_s, ind_e]
+            pos_ref = [CHR, ind_s_ref, ind_e_ref]
+            mat_ld = ldspec.score.compute_ld(dic_data, pos_tar, pos_ref, verbose=True)
+            temp_mat = np.zeros([n_snp, ind_e - ind_s], dtype=np.float32)
+            temp_mat[ind_s_ref:ind_e_ref, :] = mat_ld
+            mat_ld_list.append(sp.sparse.csc_matrix(temp_mat))
+            del temp_mat
 
-                pos_tar = [CHR, ind_s, ind_e]
-                pos_ref = [CHR, ind_s_ref, ind_e_ref]
-                mat_ld = gdreg.score.compute_ld(
-                    dic_data,
-                    pos_tar,
-                    pos_ref,
-                    verbose=True,
-                )
-                temp_mat = np.zeros([n_snp, ind_e - ind_s], dtype=np.float32)
-                temp_mat[ind_s_ref:ind_e_ref, :] = mat_ld
-                mat_ld_list.append(sp.sparse.csc_matrix(temp_mat))
-                del temp_mat
-
-            mat_ld = sp.sparse.hstack(mat_ld_list, format="csc")
-            sp.sparse.save_npz(PREFIX_OUT + ".%s_ld" % SNP_RANGE, mat_ld)
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        mat_ld = sp.sparse.hstack(mat_ld_list, format="csc")
+        sp.sparse.save_npz(PREFIX_OUT + ".%s_ld" % SNP_RANGE, mat_ld)
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
     if JOB == "compute_score":
+        print("# Running --job compute_score")
         CHR, START, END = dic_range["chr"], dic_range["start"], dic_range["end"]
         n_snp = dic_data[CHR]["pvar"].shape[0]
 
-        # Zero pad for mat_ld
+        # Create a squared `mat_ld` by zero-padding on the left and right
         mat_ld_list = []
         if START > 0:
             mat_ld_list.append(
@@ -532,44 +517,95 @@ def main(args):
                     ([0], ([0], [0])), shape=[n_snp, n_snp - END], dtype=np.float32
                 )
             )
+
         dic_ld = {CHR: sp.sparse.hstack(mat_ld_list, format="csc")}
         snp_range = (dic_range["chr"], dic_range["start"], dic_range["end"])
-
-        df_score = gdreg.score.compute_score(
+        df_score = ldspec.score.compute_score(
             dic_data,
             dic_ld,
             dic_annot_path=dic_annot_path,
             dic_pannot_path=dic_pannot_path,
-            flag_cross_term=FLAG_CROSS_TERM,
-            verbose=True,
-            #             win_size=1e7,
-            win_size=WIN_SIZE,
             snp_range=snp_range,
+            flag_cross_term=FLAG_CROSS_TERM,
+            win_size=WIN_SIZE,
+            verbose=True,
         )
 
         col_list = [x for x in df_score if x.startswith(("E", "LD", "DLD"))]
         df_score[col_list] = df_score[col_list].astype(np.float32)
-
         df_score.to_csv(
             PREFIX_OUT + ".c%d_s%d_e%d_score.tsv.gz" % (CHR, START, END),
             sep="\t",
             index=False,
             compression="gzip",
         )
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
+
+    if JOB == "combine_score":
+        print("# Running --job combine_score")
+        snp_range_list = pd.read_csv(SNP_RANGE_FILE, header=None)[0].tolist()
+        # Missing score files
+        snp_range_uf_list = []
+        for snp_range in snp_range_list:
+            score_file = SCORE_FILE.replace("@", snp_range)
+            if os.path.exists(score_file):
+                temp_df = pd.read_csv(score_file, sep="\t", index_col=None, nrows=5)
+                if temp_df.isna().sum().sum() == 0:
+                    continue
+            snp_range_uf_list.append(snp_range)
+        print(
+            "%d/%d score file missing" % (len(snp_range_uf_list), len(snp_range_list))
+        )
+
+        # Combine score files
+        if len(snp_range_uf_list) > 0:
+            OUT_FILE = PREFIX_OUT + ".snp_range_uf.txt"
+            print("    Missing score files written in '%s'" % OUT_FILE)
+            with open(OUT_FILE, "w") as f:
+                for snp_range in snp_range_uf_list:
+                    f.write("%s\n" % snp_range)
+        else:
+            for CHR in range(1, 23):
+                OUT_FILE = PREFIX_OUT + ".c%d_score.tsv.gz" % CHR
+                snp_range_list_chr = [
+                    x for x in snp_range_list if x.startswith("c%d_" % CHR)
+                ]
+                if len(snp_range_list_chr) == 0:
+                    continue
+                df_list = []
+                for snp_range in snp_range_list_chr:
+                    df_list.append(
+                        pd.read_csv(
+                            SCORE_FILE.replace("@", snp_range), sep="\t", index_col=None
+                        )
+                    )
+                df_score_chr = pd.concat(df_list, axis=0)
+                col_list = [x for x in df_score_chr if x.startswith(("E", "LD", "DLD"))]
+                df_score_chr[col_list] = df_score_chr[col_list].astype(np.float32)
+                df_score_chr.to_csv(OUT_FILE, sep="\t", index=False, compression="gzip")
+                print(
+                    "CHR%d, n_file=%d, n_snp=%d, n_col=%d, n_na=%d"
+                    % (
+                        CHR,
+                        len(snp_range_list_chr),
+                        df_score_chr.shape[0],
+                        df_score_chr.shape[1],
+                        df_score_chr.isna().sum().sum(),
+                    )
+                )
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
     if JOB == "compute_avgr":
         print("# Running --job compute_avgr")
-        dic_avgr = gdreg.score.compute_avgr(dic_pannot_path, dic_ld_path, verbose=True)
+        dic_avgr = ldspec.score.compute_avgr(dic_pannot_path, dic_ld_path, verbose=True)
         with open(PREFIX_OUT + ".avgr", "w") as f:
             for pAN in dic_avgr:
                 f.write("%s\t%0.6f\n" % (pAN, dic_avgr[pAN]))
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
     if JOB == "regress":
         print("# Running --job regress")
-
-        dic_res = gdreg.regress.estimate(
+        dic_res = ldspec.regress.estimate(
             dic_data,
             df_score,
             df_sumstats,
@@ -581,20 +617,19 @@ def main(args):
             n_jn_block=100,
             verbose=True,
         )
-
         # Store the entire file and a summary df
         dbfile = open(PREFIX_OUT + ".pickle", "wb")
         pickle.dump(dic_res, dbfile)
         dbfile.close()
         dic_res["summary"]["tau"].to_csv(PREFIX_OUT + ".tau.tsv", sep="\t", index=False)
-        dic_res["summary"]["rho"].to_csv(PREFIX_OUT + ".rho.tsv", sep="\t", index=False)
-
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        dic_res["summary"]["omega"].to_csv(
+            PREFIX_OUT + ".omega.tsv", sep="\t", index=False
+        )
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
     if JOB == "evaluate":
         print("# Running --job evaluate")
-
-        dic_res = gdreg.regress.estimate(
+        dic_res = ldspec.regress.estimate(
             dic_data,
             df_score,
             df_sumstats,
@@ -607,21 +642,19 @@ def main(args):
             n_jn_block=100,
             verbose=True,
         )
-
         dbfile = open(PREFIX_OUT + ".pickle", "wb")
         pickle.dump(dic_res, dbfile)
         dbfile.close()
-
-        print("    " + gdreg.util.get_sys_info(sys_start_time))
+        print("    " + ldspec.util.get_sys_info(sys_start_time))
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="gdreg")
+    parser = argparse.ArgumentParser(description="ldspec")
 
     parser.add_argument("--job", type=str, required=True, help="One of [compute_ld]")
     parser.add_argument("--pgen_file", type=str, required=False, default=None)
     parser.add_argument(
-        "--ld_file", type=str, required=False, default=None, help=".<range>_ld.npz"
+        "--ld_file", type=str, required=False, default=None, help=".<snp_range>_ld.npz"
     )
     parser.add_argument(
         "--annot_file",
@@ -631,6 +664,7 @@ if __name__ == "__main__":
         help="Comma-separated file paths or .txt file with one line per file path.",
     )
     parser.add_argument("--score_file", type=str, required=False, default=None)
+    parser.add_argument("--snp_range_file", type=str, required=False, default=None)
     parser.add_argument("--sumstats_file", type=str, required=False, default=None)
     parser.add_argument("--avgr_file", type=str, required=False, default=None)
     parser.add_argument("--null_model_file", type=str, required=False, default=None)
@@ -641,8 +675,7 @@ if __name__ == "__main__":
         default=None,
         help="c1_s20_e1701_r1, '_rall' for all ref CHRs",
     )
-    parser.add_argument("--win_size", type=str, default='1e7')
-    parser.add_argument("--flag_full_ld", type=bool, default=False)
+    parser.add_argument("--win_size", type=str, default="1e7")
     parser.add_argument("--flag_cross_term", type=bool, default=False)
     parser.add_argument("--flag_nofil_snp", type=bool, default=False)
 

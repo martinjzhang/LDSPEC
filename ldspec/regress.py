@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 import pandas as pd
 import time
-import gdreg
+import ldspec
 import itertools
 import warnings
 
@@ -21,30 +21,37 @@ def estimate(
     verbose=False,
 ):
     """
-    GDREG estimation
+    LDSPEC estimation
+    - If 'LD:AN:all' is in df_score, it is used as the LD score weights. Otherwise,
+        the LD score weight is computed as the sum of all scores starting with
+        'LD:AN:all_' or 'LD:AN:mbin'.
+    - AN and pAN ending with '_common', '_lf' are recognized as common/lf annotations, and the
+        corresponding all SNPs from the category are used for computing heritabiltiy enrichment.
+    - Pannots with 'prox' are recognized as proximity-based annotations, used for `ecov` and `ecor`.
 
     Parameters
     ----------
     dic_data : dict
-        Genotype data reader, organized, for each CHR, as
-
+        Genotype data reader. Must contain all CHRs.
         - dic_data[CHR]['pgen'] : .pgen file path
         - dic_data[CHR]['pvar'] : .pvar pd.DataFrame
         - dic_data[CHR]['psam'] : .psam pd.DataFrame
     df_score : pd.DataFrame, default=None
-        GDREG LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'LD:AN:name1', 'LD:AN:name2',
-        'LD:E', 'DLD:pAN:name1', 'DLD:pAN:name2', ...]. Must contain 'LD:AN:allXX' where
-        XX is one of ["", "_common", "_ld", "_rare"]. pannots with 'prox' are used as reference
-        for computing ecov and ecor
+        LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'E', 'LD:AN1', 'LD:AN2', ...,
+        'DLD:pAN1', 'DLD:pAN2', ...].
+        - Must contain 'LD:AN:allXX' where XX is one of ["", "_common", "_lf"].
+        - Pannots with 'prox' are used as reference for computing `ecov` and `ecor`.
     df_sumstats : pd.DataFrame
         Summary statistics with columns ['SNP', 'N', 'Z', 'A1', 'A2']
-    dic_annot_path : dic of dic of strs
-        File path for single-SNP annotation. dic_annot_path[annot_name][CHR] contains the
-        `.annot.gz` file path for annot_file `annot_name` and CHR `CHR`.
-    dic_pannot_path : dic of dic of strs
-        File path for SNP-pair annotation. dic_pannot_path[annot_name][CHR] contains the
-        `.pannot_mat.npz` file path for annotation pAN and and CHR `CHR`. Dimension of the
-        sparse matrix should match `dic_data[CHR][pvar]`.
+    dic_annot_path : dict of dict of str
+        File path for single-SNP annotations. `dic_annot_path[annot_name][CHR]` contains the
+        `.annot.gz` file path for `annot_name` and `CHR`.
+    dic_pannot_path : dict of dict of str
+        File path for SNP-pair annotations. `dic_pannot_path[annot_name][CHR]` contains the
+        `.pannot_mat.npz` file path for annotation `annot_name` and `CHR`. Dimension of the
+        sparse matrix must match `dic_data[CHR]['pvar']`.
+    dic_avgr : dict of float, default={}
+        `dic_avgr[pAN]` contains the average LD across all pairs in `pAN`.
     flag_cross_term : bool, default=False
         If True, also use cross terms (Z_i Z_j) for regression, for SNP pairs i,j within
         10000 SNPs and covered by at least one pannot.
@@ -52,30 +59,35 @@ def estimate(
         If True, turning off outlier filter.
     n_jn_block : int, default=100
         Number of JN blocks.
+    null_model : list of str
+        List of scores used in the null model for model evaluation. E.g.,
+        ['LD:AN:Backgrd_Selection_Stat_common', 'LD:AN:Backgrd_Selection_Stat_lf',
+        'LD:AN:CpG_common', 'LD:AN:CpG_lf', 'LD:AN:LLD_AFR_common', ...]
 
     Returns
     -------
-    df_res : pd.DataFrame
-        GDREG results.
-
-        - dic_res[0] : regression using only LD scores.
-            - dic_res['term'] : regression terms
-            - dic_res['coef'] : regression coefficients
-            - dic_res['coef_jn'] : JN-debiased regression coefficients
-            - dic_res['coef_jn_cov'] : regression coefficient covariance based on JN
-            - dic_res['summary'] : result summary
-        - dic_res[1] : regression using both LD and DLD scores, structure same as dic_res[0]
-
+    dic_res : dict
+        LDSPEC results.
+        - dic_res['term'] : scores used in regression, e.g., ['LD:AN1', 'DLD:pAN1', 'E'].
+        - dic_res['coef'] : coefficient estimates (tau and omega).
+        - dic_res['coef_jn'] : JN-debiased estimates (tau and omega).
+        - dic_res['coef_jn_cov'] : JN estimate of coefficient covariance.
+        - dic_res['coef_block'] : coefficient estimates for each JN block of shape (n_jn_block, n_coef).
+        - dic_res['v_h'] : JN block weights of shape (n_jn_block,).
+        - dic_res['summary'] : summary of results.
+        - dic_res['summary']['tau'] : summary of 'tau' results.
+        - dic_res['summary']['omega'] : summary of 'omega' results.
+        - dic_res['summary']['prox_list'] : list of pAN used as prox pannots for ecov and ecor.
+        - dic_res['summary']['sub_prox_list'] : list of non-overlapping pAN computed from prox.
+        - dic_res['summary']['dic_jn'] : additional JN statistics.
 
     TODO
     ----
-    - Only do the joint analyses
-    - Add jn results for other quantities
     """
 
     start_time = time.time()
     if verbose:
-        print("# Call: gdreg.regress.estimate")
+        print("# Call: ldspec.regress.estimate")
 
     # Annotations
     CHR_list = sorted(dic_data)  # CHR_list contains all CHRs
@@ -144,10 +156,10 @@ def estimate(
 
     # Regression
     dic_res = {}
-    temp_df_reg = df_reg.join(df_score[LD_list + DLD_list + ["E"]])
-    dic_block = get_block(temp_df_reg, n_block=n_jn_block)
+    df_reg = df_reg.join(df_score[LD_list + DLD_list + ["E"]])
+    dic_block = get_block(df_reg, n_block=n_jn_block)
     dic_res = regress(
-        temp_df_reg,
+        df_reg,
         dic_block,
         n_sample_zsq,
         null_model=null_model,
@@ -183,46 +195,35 @@ def summarize(
     verbose_prefix="",
 ):
     """
-    Summarize GDREG result.
+    Summarize LDSPEC result.
 
     Parameters
     ----------
     dic_res : dict
-        Regression results.
-
-        - dic_res['term'] : list of terms.
-        - dic_res['coef'] : estimated coefs. np.ndarray(dtype=np.float32).
-        - dic_res['coef_jn'] : JN estimated coefs. np.ndarray(dtype=np.float32).
-        - dic_res['coef_jn_cov'] : estimated coef covariance. np.ndarray(dtype=np.float32).
+        LDSPEC regression results output by ldspec.regress.regress
     dic_data : dict
-        Genotype data reader. Must contain SNPs from all chromosomes.
-
+        Genotype data reader. Must contain all CHRs.
         - dic_data[CHR]['pgen'] : .pgen file path
         - dic_data[CHR]['pvar'] : .pvar pd.DataFrame
         - dic_data[CHR]['psam'] : .psam pd.DataFrame
-    dic_annot_path : dic of dic of strs, , default={}
-        File path for single-SNP annotation. dic_annot_path[annot_name][CHR] contains the
-        `.annot.gz` file path for annot_file `annot_name` and CHR `CHR`.
-    dic_pannot_path : dic of dic of strs, default={}
-        File path for SNP-pair annotation. dic_pannot_path[annot_name][CHR] contains the
-        `.pannot_mat.npz` file path for annotation pAN and and CHR `CHR`. Dimension of the
-        sparse matrix should match `dic_data[CHR][pvar]`.
-    dic_avgr : dic, default={}
-        dic_avgr[pAN] contains the average LD across all pairs in pAN.
+    dic_annot_path : dict of dict of str
+        File path for single-SNP annotations. `dic_annot_path[annot_name][CHR]` contains the
+        `.annot.gz` file path for `annot_name` and `CHR`.
+    dic_pannot_path : dict of dict of str
+        File path for SNP-pair annotations. `dic_pannot_path[annot_name][CHR]` contains the
+        `.pannot_mat.npz` file path for annotation `annot_name` and `CHR`. Dimension of the
+        sparse matrix must match `dic_data[CHR]['pvar']`.
+    dic_avgr : dict of float, default={}
+        `dic_avgr[pAN]` contains the average LD across all pairs in `pAN`.
 
     Returns
     -------
-    df_summary : pd.DataFrame
-        Regression result summary.
-
-        - tau,tau_se : \tau coefficient
-        - h2,h2_se : total heritability of SNPs in a given annot
-        - enrich,enrich_se : heritability enrichment
-        - rho,rho_se : \rho coefficient
-        - cov,cov_se : total covariance of SNP pairs in a given pannot
-        - r2,r2_se : `cov` divided by total \sqrt{ h_ps_i h_ps_j } of SNP pairs in a given pannot,
-            where h_ps_i is the per-SNP heritablity of SNP i. `r2_se` based on if `cov` is
-            significantly different from 0.
+    dic_summary : dict
+        - dic_summary['tau'] : summary of 'tau' results.
+        - dic_summary['omega'] : summary of 'omega' results.
+        - dic_summary['prox_list'] : list of pAN used as prox pannots for ecov and ecor.
+        - dic_summary['sub_prox_list'] : list of non-overlapping pAN computed from prox.
+        - dic_summary['dic_jn'] : additional JN statistics.
 
     TODO
     ----
@@ -243,11 +244,11 @@ def summarize(
     AN_list = []
     for annot_name in dic_annot_path:
         CHR = list(dic_annot_path[annot_name])[0]
-        temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR], nrows=5)
+        temp_df = ldspec.util.read_annot(dic_annot_path[annot_name][CHR], nrows=5)
         AN_list.extend([x for x in temp_df if x.startswith("AN:")])
     pAN_list = list(dic_pannot_path)
 
-    if len(dic_avgr) == 0:
+    if len(dic_avgr) == 0:  # raise NA if pAN missing from dic_avgr
         dic_avgr = {x: 0 for x in pAN_list}
 
     # dis_res
@@ -260,10 +261,9 @@ def summarize(
     assert len(set(res_AN_list) - set(AN_list)) == 0, err_msg
     err_msg = "dic_pannot_mat does not contain all pannots in dic_res"
     assert len(set(res_pAN_list) - set(pAN_list)) == 0, err_msg
-    # TODO : check dic_avgr
 
     if verbose:
-        print(verbose_prefix + "# Call: gdreg.regress.summarize")
+        print(verbose_prefix + "# Call: ldspec.regress.summarize")
         print(
             verbose_prefix
             + "    %d annots, %d pannots" % (len(res_AN_list), len(res_pAN_list))
@@ -316,14 +316,14 @@ def summarize(
         },
     )
 
-    df_sum_rho = pd.DataFrame(
+    df_sum_omega = pd.DataFrame(
         index=res_pAN_list,
         data={
             "pannot": res_pAN_list,
             "n_pair": 0,
-            "rho": [dic_coef_jn[x] for x in res_pAN_list],
-            "rho_se": [np.sqrt(df_coef_cov.loc[x, x]) for x in res_pAN_list],
-            "rho_p": np.nan,
+            "omega": [dic_coef_jn[x] for x in res_pAN_list],
+            "omega_se": [np.sqrt(df_coef_cov.loc[x, x]) for x in res_pAN_list],
+            "omega_p": np.nan,
             "cov": np.nan,  # Total covariance
             "cov_se": np.nan,
             "cov_p": np.nan,
@@ -361,32 +361,33 @@ def summarize(
         "ecor.jn": np.zeros([n_jn_block, len(res_pAN_list)], dtype=np.float32),
     }
 
-    # Iterate over CHR_list to collect info
+    # Iterate over CHR in CHR_list to collect info
     dic_AN_n_snp = {x: 0 for x in res_AN_list}
     dic_AN_type = {x: "binary" for x in res_AN_list}
     dic_AN_v = {
         x: np.zeros(len(res_AN_list), dtype=np.float32) for x in res_AN_list
-    }  # n_overlap between all AN and the given AN
+    }  # dic_AN_v[AN][c] = n_overlap(AN, c), coef of tau(c) in `h2`
     dic_AN_n_snp_ref = {x: 0 for x in res_AN_list}
     dic_AN_v_ref = {
         x: np.zeros(len(res_AN_list), dtype=np.float32) for x in res_AN_list
-    }  # All SNPs from the same common/lf/rare mbin as `AN`
+    }  # dic_AN_v_ref[AN][c] = n_overlap(AN_ref, c), coef of tau(c) in `h2`
 
     dic_AN_v_p = {
         x: np.zeros(len(res_pAN_list), dtype=np.float32) for x in res_AN_list
-    }  # h2p coefficients
+    }  # dic_AN_v[AN][k] = avgr(pAN) * n_overlap(AN, k), coef of omega(k) in `h2`
     dic_AN_v_p_ref = {
         x: np.zeros(len(res_pAN_list), dtype=np.float32) for x in res_AN_list
-    }  # Reference h2p coefficients
+    }  # dic_AN_v[AN_ref][k] = avgr(pAN) * n_overlap(AN, k), coef of omega(k) in `h2`
 
     dic_pAN_n_pair = {x: 0 for x in res_pAN_list}
     dic_pAN_v = {
         x: np.zeros(len(res_pAN_list), dtype=np.float32) for x in res_pAN_list
-    }  # n_overlap between all pAN and the given pAN
-    dic_pAN_var = {x: 0 for x in res_pAN_list}  # Total sqrt(var_i var_j)
+    }  # dic_pAN_v[pAN][k] = n_overlap(pAN, k), coef of omega(k) in `cov`
+    dic_pAN_var = {
+        x: 0 for x in res_pAN_list
+    }  # dic_pAN_var[k] = \sum_{i,j in G^k} \sqrt(var_i var_j)
     dic_pAN_var_block = {x: [0] * n_jn_block for x in res_pAN_list}
 
-    #     for CHR in CHR_list:
     for i_CHR, CHR in enumerate(CHR_list):
         # df_annot_chr
         df_annot_chr = pd.DataFrame(
@@ -396,7 +397,7 @@ def summarize(
             dtype=np.float32,
         )
         for annot_name in dic_annot_path:
-            temp_df = gdreg.util.read_annot(dic_annot_path[annot_name][CHR])
+            temp_df = ldspec.util.read_annot(dic_annot_path[annot_name][CHR])
             for AN in [x for x in temp_df if x in res_AN_list]:
                 temp_dic = {x: y for x, y in zip(temp_df["SNP"], temp_df[AN]) if y != 0}
                 df_annot_chr[AN] = np.array(
@@ -406,19 +407,19 @@ def summarize(
 
         # Square-root per-SNP heritability : v_h2ps, v_h2ps_jn, mat_h2ps_block
         v_h2ps = np.zeros(df_annot_chr.shape[0], dtype=np.float32)
-        v_h2ps_jn = np.zeros(df_annot_chr.shape[0], dtype=np.float32)
+        #         v_h2ps_jn = np.zeros(df_annot_chr.shape[0], dtype=np.float32)
         mat_h2ps_block = np.zeros(
             [n_jn_block, df_annot_chr.shape[0]], dtype=np.float32
         )  # (n_jn_block, n_snp_chr)
         for AN in res_AN_list:
             v_h2ps += dic_coef[AN] * df_annot_chr[AN].values
-            v_h2ps_jn += dic_coef_jn[AN] * df_annot_chr[AN].values
-            for i in range(n_jn_block):
-                mat_h2ps_block[i, :] += (
-                    df_coef_block.loc[i, AN] * df_annot_chr[AN].values
+            #             v_h2ps_jn += dic_coef_jn[AN] * df_annot_chr[AN].values
+            for i_block in range(n_jn_block):
+                mat_h2ps_block[i_block, :] += (
+                    df_coef_block.loc[i_block, AN] * df_annot_chr[AN].values
                 )
         v_h2ps = np.sqrt(v_h2ps.clip(min=0)).astype(np.float32)
-        v_h2ps_jn = np.sqrt(v_h2ps_jn.clip(min=0)).astype(np.float32)
+        #         v_h2ps_jn = np.sqrt(v_h2ps_jn.clip(min=0)).astype(np.float32)
         mat_h2ps_block = np.sqrt(mat_h2ps_block.clip(min=0)).astype(np.float32)
 
         # Update annot info
@@ -430,8 +431,10 @@ def summarize(
                 df_annot_chr.loc[df_annot_chr[AN] == 1, res_AN_list].sum(axis=0).values
             )
 
-            ref_col_list = res_AN_list
-            for term in ["_common", "_lf", "_rare"]:  # if not, use all SNPs as ref
+            ref_col_list = (
+                res_AN_list  # ANs used to define reference SNPs for h2s_enrich
+            )
+            for term in ["_common", "_lf"]:  # C/LF SNPs; if not, use all SNPs
                 if AN.endswith(term):
                     ref_col_list = [x for x in res_AN_list if x.endswith(term)]
             ind_ref = (df_annot_chr[ref_col_list].values == 1).sum(axis=1) > 0
@@ -443,35 +446,41 @@ def summarize(
         # dic_mat_G_chr
         dic_mat_G_chr = {}
         for pAN in res_pAN_list:
-            dic_mat_G_chr[pAN] = gdreg.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
+            dic_mat_G_chr[pAN] = ldspec.util.read_pannot_mat(dic_pannot_path[pAN][CHR])
 
         # Update pannot info
         for pAN in res_pAN_list:
             dic_pAN_n_pair[pAN] += dic_mat_G_chr[pAN].sum()
-            temp_list = [
-                dic_mat_G_chr[pAN].multiply(dic_mat_G_chr[x]).sum()
-                for x in res_pAN_list
-            ]
-            dic_pAN_v[pAN] += np.array(temp_list, dtype=np.float32)
-
+            dic_pAN_v[pAN] += np.array(
+                [
+                    dic_mat_G_chr[pAN].multiply(dic_mat_G_chr[x]).sum()
+                    for x in res_pAN_list
+                ],
+                dtype=np.float32,
+            )
             dic_pAN_var[pAN] += dic_mat_G_chr[pAN].dot(v_h2ps).T.dot(v_h2ps)
-            for i in range(n_jn_block):
-                dic_pAN_var_block[pAN][i] += (
+            for i_block in range(n_jn_block):
+                dic_pAN_var_block[pAN][i_block] += (
                     dic_mat_G_chr[pAN]
-                    .dot(mat_h2ps_block[i, :])
-                    .T.dot(mat_h2ps_block[i, :])
+                    .dot(mat_h2ps_block[i_block, :])
+                    .T.dot(mat_h2ps_block[i_block, :])
                 )
 
         # Create non-overlapping prox and update info
         if i_CHR == 0:
-            dic_prox_n_pair, dic_prox_v = {}, {}
+            dic_prox_n_pair, dic_prox_v = (
+                {},
+                {},
+            )  # dic_prox_v[prox][k] = n_overlap(proc, k), for non-overlapping `prox`
             for sub_prox in itertools.product(
                 [0, 1], repeat=len(res_prox_list)
             ):  # defined in logic relations, [1, 0] meaning G1 - G2
                 if np.sum(sub_prox) == 0:
                     continue
-                temp_mat_G = dic_mat_G_chr[res_prox_list[np.where(sub_prox)[0][0]]].copy()
-                for val,pAN in zip(sub_prox, res_prox_list):
+                temp_mat_G = dic_mat_G_chr[
+                    res_prox_list[np.where(sub_prox)[0][0]]
+                ].copy()
+                for val, pAN in zip(sub_prox, res_prox_list):
                     if val == 1:
                         temp_mat_G = temp_mat_G.multiply(dic_mat_G_chr[pAN])
                     else:
@@ -479,36 +488,43 @@ def summarize(
 
                 if temp_mat_G.sum() > 0:
                     dic_prox_n_pair[sub_prox] = temp_mat_G.sum()
-                    temp_list = [
-                        temp_mat_G.multiply(dic_mat_G_chr[x]).sum()
-                        for x in res_pAN_list
-                    ]
-                    dic_prox_v[sub_prox] = np.array(temp_list, dtype=np.float32)
+                    dic_prox_v[sub_prox] = np.array(
+                        [
+                            temp_mat_G.multiply(dic_mat_G_chr[x]).sum()
+                            for x in res_pAN_list
+                        ],
+                        dtype=np.float32,
+                    )
             if verbose:
                 print(
                     verbose_prefix
                     + "    %d non-overlapping pannots : %s"
-                    % (len(dic_prox_n_pair), ", ".join([str(x) for x in dic_prox_n_pair]))
+                    % (
+                        len(dic_prox_n_pair),
+                        ", ".join([str(x) for x in dic_prox_n_pair]),
+                    )
                 )
         else:
             for sub_prox in dic_prox_n_pair:
-                temp_mat_G = dic_mat_G_chr[res_prox_list[np.where(sub_prox)[0][0]]].copy()
-                for val,pAN in zip(sub_prox, res_prox_list):
+                temp_mat_G = dic_mat_G_chr[
+                    res_prox_list[np.where(sub_prox)[0][0]]
+                ].copy()
+                for val, pAN in zip(sub_prox, res_prox_list):
                     if val == 1:
                         temp_mat_G = temp_mat_G.multiply(dic_mat_G_chr[pAN])
                     else:
                         temp_mat_G = temp_mat_G > dic_mat_G_chr[pAN]
 
                 dic_prox_n_pair[sub_prox] += temp_mat_G.sum()
-                temp_list = [
-                    temp_mat_G.multiply(dic_mat_G_chr[x]).sum() for x in res_pAN_list
-                ]
-                dic_prox_v[sub_prox] += np.array(temp_list, dtype=np.float32)
+                dic_prox_v[sub_prox] += np.array(
+                    [temp_mat_G.multiply(dic_mat_G_chr[x]).sum() for x in res_pAN_list],
+                    dtype=np.float32,
+                )
 
-        # Update annot * pannot info for h2p and h2p_enrich
+        # Update annot * pannot info for h2-h2s
         for AN in res_AN_list:
-            ref_col_list = res_AN_list
-            for term in ["_common", "_lf", "_rare"]:  # if not, use all SNPs as ref
+            ref_col_list = res_AN_list  # to define reference SNPs for h2_enrich
+            for term in ["_common", "_lf"]:  # C/LF SNPs; if not, use all SNPs
                 if AN.endswith(term):
                     ref_col_list = [x for x in res_AN_list if x.endswith(term)]
             ind_ref = ((df_annot_chr[ref_col_list].values == 1).sum(axis=1) > 0) * 1
@@ -525,7 +541,7 @@ def summarize(
     # Summary : n_snp,type,n_pair
     df_sum_tau["n_snp"] = [dic_AN_n_snp[x] for x in res_AN_list]
     df_sum_tau["type"] = [dic_AN_type[x] for x in res_AN_list]
-    df_sum_rho["n_pair"] = [dic_pAN_n_pair[x] for x in res_pAN_list]
+    df_sum_omega["n_pair"] = [dic_pAN_n_pair[x] for x in res_pAN_list]
 
     # Summary : h2, h2s, h2_enrich, h2s_enrich
     for term in ["h2", "h2s"]:
@@ -571,9 +587,9 @@ def summarize(
                 dic_v[AN].dot(mat_cov).dot(dic_v[AN])
             )
             dic_jn[term][i_AN] = (dic_v[AN] * v_coef).sum()  # JN statistics for h2
-            for i in range(n_jn_block):
-                dic_jn["%s.jn" % term][i, i_AN] = (
-                    dic_v[AN] * mat_coef_block[i, :]
+            for i_block in range(n_jn_block):
+                dic_jn["%s.jn" % term][i_block, i_AN] = (
+                    dic_v[AN] * mat_coef_block[i_block, :]
                 ).sum()
 
             # h2_enrich and h2_enrich_se via JN
@@ -586,11 +602,13 @@ def summarize(
                 h2_ps / h2_ps_ref
             )  # JN statistics for h2_enrich
             mat_esti_jn = []
-            for i in range(n_jn_block):
-                h2_ps = (dic_v[AN] * mat_coef_block[i, :]).sum() / n_snp_AN
-                h2_ps_ref = (dic_v_ref[AN] * mat_coef_block[i, :]).sum() / n_snp_ref
+            for i_block in range(n_jn_block):
+                h2_ps = (dic_v[AN] * mat_coef_block[i_block, :]).sum() / n_snp_AN
+                h2_ps_ref = (
+                    dic_v_ref[AN] * mat_coef_block[i_block, :]
+                ).sum() / n_snp_ref
                 mat_esti_jn.append(h2_ps / h2_ps_ref)
-                dic_jn["%s_enrich.jn" % term][i, i_AN] = (
+                dic_jn["%s_enrich.jn" % term][i_block, i_AN] = (
                     h2_ps / h2_ps_ref
                 )  # JN statistics for h2_enrich
             v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res["v_h"])
@@ -603,7 +621,7 @@ def summarize(
             )
             dif_ = (temp_v * v_coef_jn).sum()
             se_ = np.sqrt(temp_v.dot(mat_cov).dot(temp_v))
-            df_sum_tau.loc[AN, "%s_enrich_p" % term] = gdreg.util.zsc2pval(
+            df_sum_tau.loc[AN, "%s_enrich_p" % term] = ldspec.util.zsc2pval(
                 dif_ / se_, option="two-sided"
             )
 
@@ -614,66 +632,70 @@ def summarize(
     mat_coef_block = df_coef_block[res_pAN_list].values
     for i_pAN, pAN in enumerate(res_pAN_list):
         # cov, cov_se
-        df_sum_rho.loc[pAN, "cov"] = (dic_pAN_v[pAN] * v_coef_jn).sum()
-        df_sum_rho.loc[pAN, "cov_se"] = np.sqrt(
+        df_sum_omega.loc[pAN, "cov"] = (dic_pAN_v[pAN] * v_coef_jn).sum()
+        df_sum_omega.loc[pAN, "cov_se"] = np.sqrt(
             dic_pAN_v[pAN].dot(mat_cov).dot(dic_pAN_v[pAN])
         )
         dic_jn["cov"][i_pAN] = (dic_pAN_v[pAN] * v_coef).sum()  # JN statistics for cov
-        for i in range(n_jn_block):
-            dic_jn["cov.jn"][i, i_pAN] = (dic_pAN_v[pAN] * mat_coef_block[i, :]).sum()
+        for i_block in range(n_jn_block):
+            dic_jn["cov.jn"][i_block, i_pAN] = (
+                dic_pAN_v[pAN] * mat_coef_block[i_block, :]
+            ).sum()
 
         # cor, cor_se via JN
         v_esti = [(dic_pAN_v[pAN] * v_coef).sum() / dic_pAN_var[pAN]]
         dic_jn["cor"][i_pAN] = v_esti[0]  # JN statistics for cor
         mat_esti_jn = []
-        for i in range(n_jn_block):
-            v_coef_block = mat_coef_block[i, :]
+        for i_block in range(n_jn_block):
+            v_coef_block = mat_coef_block[i_block, :]
             mat_esti_jn.append(
-                (dic_pAN_v[pAN] * v_coef_block).sum() / dic_pAN_var_block[pAN][i]
+                (dic_pAN_v[pAN] * v_coef_block).sum() / dic_pAN_var_block[pAN][i_block]
             )
-            dic_jn["cor.jn"][i, i_pAN] = mat_esti_jn[-1]  # JN statistics for cor
+            dic_jn["cor.jn"][i_block, i_pAN] = mat_esti_jn[-1]  # JN statistics for cor
         v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res["v_h"])
-        df_sum_rho.loc[pAN, "cor"] = v_mean_jn[0]
-        df_sum_rho.loc[pAN, "cor_se"] = np.sqrt(mat_cov_jn[0, 0])
+        df_sum_omega.loc[pAN, "cor"] = v_mean_jn[0]
+        df_sum_omega.loc[pAN, "cor_se"] = np.sqrt(mat_cov_jn[0, 0])
 
         # ecov, ecov_se; ecor, ecor_se via JN
         temp_v = dic_pAN_v[pAN].copy()
-        #         for prox in res_prox_list:
-        #             temp_r = dic_pAN_v[prox][i_pAN] / df_sum_rho.loc[prox, "n_pair"]
-        #             temp_v -= dic_pAN_v[prox] * temp_r  # TODO: support overlapping prox
         for sub_prox in dic_prox_n_pair:  # non-overlapping prox
             temp_r = dic_prox_v[sub_prox][i_pAN] / dic_prox_n_pair[sub_prox]
-            temp_v -= dic_prox_v[sub_prox] * temp_r 
+            temp_v -= dic_prox_v[sub_prox] * temp_r
 
-        df_sum_rho.loc[pAN, "ecov"] = (temp_v * v_coef_jn).sum()
-        df_sum_rho.loc[pAN, "ecov_se"] = np.sqrt(temp_v.dot(mat_cov).dot(temp_v))
-
+        df_sum_omega.loc[pAN, "ecov"] = (temp_v * v_coef_jn).sum()
+        df_sum_omega.loc[pAN, "ecov_se"] = np.sqrt(temp_v.dot(mat_cov).dot(temp_v))
         dic_jn["ecov"][i_pAN] = (temp_v * v_coef).sum()  # JN statistics for ecov
-        for i in range(n_jn_block):
-            dic_jn["ecov.jn"][i, i_pAN] = (temp_v * mat_coef_block[i, :]).sum()
+        for i_block in range(n_jn_block):
+            dic_jn["ecov.jn"][i_block, i_pAN] = (
+                temp_v * mat_coef_block[i_block, :]
+            ).sum()
 
         v_esti = [(temp_v * v_coef).sum() / dic_pAN_var[pAN]]
         dic_jn["ecor"][i_pAN] = v_esti[0]  # JN statistics for ecor
         mat_esti_jn = []
-        for i in range(n_jn_block):
-            v_coef_block = mat_coef_block[i, :]
+        for i_block in range(n_jn_block):
+            v_coef_block = mat_coef_block[i_block, :]
             mat_esti_jn.append(
-                (temp_v * v_coef_block).sum() / dic_pAN_var_block[pAN][i]
+                (temp_v * v_coef_block).sum() / dic_pAN_var_block[pAN][i_block]
             )
-            dic_jn["ecor.jn"][i, i_pAN] = mat_esti_jn[-1]  # JN statistics for ecor
+            dic_jn["ecor.jn"][i_block, i_pAN] = mat_esti_jn[
+                -1
+            ]  # JN statistics for ecor
         v_mean_jn, mat_cov_jn = bjn(v_esti, mat_esti_jn, dic_res["v_h"])
-        df_sum_rho.loc[pAN, "ecor"] = v_mean_jn[0]
-        df_sum_rho.loc[pAN, "ecor_se"] = np.sqrt(mat_cov_jn[0, 0])
+        df_sum_omega.loc[pAN, "ecor"] = v_mean_jn[0]
+        df_sum_omega.loc[pAN, "ecor_se"] = np.sqrt(mat_cov_jn[0, 0])
 
     # Add p-value via z-score
     for term in ["tau", "h2", "h2s"]:
-        temp_z = df_sum_tau[term].values / df_sum_tau["%s_se" % term].values
-        df_sum_tau["%s_p" % term] = gdreg.util.zsc2pval(temp_z, option="two-sided")
-    for term in ["rho", "cov", "ecov"]:
-        temp_z = df_sum_rho[term].values / df_sum_rho["%s_se" % term].values
-        df_sum_rho["%s_p" % term] = gdreg.util.zsc2pval(temp_z, option="two-sided")
+        temp_z = (df_sum_tau[term] / df_sum_tau["%s_se" % term]).values
+        temp_z[np.isnan(temp_z)] = 0
+        df_sum_tau["%s_p" % term] = ldspec.util.zsc2pval(temp_z, option="two-sided")
+    for term in ["omega", "cov", "ecov"]:
+        temp_z = (df_sum_omega[term] / df_sum_omega["%s_se" % term]).values
+        temp_z[np.isnan(temp_z)] = 0
+        df_sum_omega["%s_p" % term] = ldspec.util.zsc2pval(temp_z, option="two-sided")
 
-    # Add h2_shrink, p-value via testing whether h2 - h2s = 0
+    # Add h2_shrink p-value via testing whether h2 - h2s = 0
     v_mean_jn, mat_cov_jn = bjn(
         dic_jn["h2"] / dic_jn["h2s"], dic_jn["h2.jn"] / dic_jn["h2s.jn"], dic_jn["v_h"]
     )
@@ -683,11 +705,11 @@ def summarize(
         dic_jn["h2"] - dic_jn["h2s"], dic_jn["h2.jn"] - dic_jn["h2s.jn"], dic_jn["v_h"]
     )
     temp_z = v_mean_jn / np.sqrt(np.diag(mat_cov_jn))
-    df_sum_tau["h2_shrink_p"] = gdreg.util.zsc2pval(temp_z, option="two-sided")
+    df_sum_tau["h2_shrink_p"] = ldspec.util.zsc2pval(temp_z, option="two-sided")
 
     # Add p-value for cor (same as cov) and ecor (same as ecov)
-    df_sum_rho["cor_p"] = df_sum_rho["cov_p"]
-    df_sum_rho["ecor_p"] = df_sum_rho["ecov_p"]
+    df_sum_omega["cor_p"] = df_sum_omega["cov_p"]
+    df_sum_omega["ecor_p"] = df_sum_omega["ecov_p"]
 
     if verbose:
         print(
@@ -696,14 +718,14 @@ def summarize(
 
     return {
         "tau": df_sum_tau,
-        "rho": df_sum_rho,
+        "omega": df_sum_omega,
         "prox_list": res_prox_list,
         "sub_prox_list": list(dic_prox_v),
         "dic_jn": dic_jn,
     }
 
 
-def get_block(df_reg, pannot_list=[], sym_non_pAN="non-pAN", n_block=100):
+def get_block(df_reg, n_block=100):
     """
     Block partition. SNPs on the same .pannot annotation go to the same block.
     SNPs on different CHRs go to different blocks.
@@ -712,12 +734,7 @@ def get_block(df_reg, pannot_list=[], sym_non_pAN="non-pAN", n_block=100):
     ----------
     df_reg : pd.DataFrame
         SNPs used in regression. Must be sorted by genomic location. Must contain
-        ['CHR', 'SNP', 'SNP1', 'SNP2'].
-    pannot_list : list of pd.DataFrame, default=[]
-        Each element corresponds to a SNP-pair annotation with columns
-        ['CHR', 'SNP', 'BP', 'pAN:name']
-    sym_non_pAN : str, default='non-pAN'
-        Symbol for SNPs not in the SNP-pair annotation.
+        ['CHR'].
     n_block: int, default=100
         Number of jackknife blocks.
 
@@ -739,34 +756,9 @@ def get_block(df_reg, pannot_list=[], sym_non_pAN="non-pAN", n_block=100):
     temp_v = df_reg["CHR"].values
     cut_set.update(np.arange(1, n_snp)[temp_v[1:] != temp_v[:-1]])
 
-    # Non-split locations
-    nocut_set = set()
-    for df_pannot in pannot_list:
-        pAN = [x for x in df_pannot if x.startswith("pAN")][0]
-        temp_dic = {x: y for x, y in zip(df_pannot["SNP"], df_pannot[pAN])}
-
-        # SNP1
-        temp_v = np.array(
-            [temp_dic[x] if x in temp_dic else sym_non_pAN for x in df_reg["SNP1"]]
-        )
-        ind_select1 = (temp_v[1:] == temp_v[:-1]) & (temp_v[1:] != sym_non_pAN)
-        # SNP2
-        temp_v = np.array(
-            [temp_dic[x] if x in temp_dic else sym_non_pAN for x in df_reg["SNP2"]]
-        )
-        ind_select2 = (temp_v[1:] == temp_v[:-1]) & (temp_v[1:] != sym_non_pAN)
-
-        nocut_set.update(np.arange(1, n_snp)[ind_select1 | ind_select2])
-
-    #         temp_v = np.array(
-    #             [temp_dic[x] if x in temp_dic else sym_non_pAN for x in df_reg["SNP1"]]
-    #         )
-    #         ind_select = (temp_v[1:] == temp_v[:-1]) & (temp_v[1:] != sym_non_pAN)
-    #         nocut_set.update(np.arange(1, n_snp)[ind_select])
-
     dic_block, i_block, ind_s = {}, 0, 0
     for i in range(1, n_snp + 1):
-        if (i in cut_set) | ((i - ind_s > block_size) & (i not in nocut_set)):
+        if (i in cut_set) | (i - ind_s > block_size):
             dic_block[i_block] = (ind_s, i)
             ind_s = i
             i_block += 1
@@ -783,29 +775,33 @@ def regress(
 ):
 
     """
-    GDREG regression
+    LDSPEC regression
 
     Parameters
     ----------
     df_reg : pd.DataFrame
-        GDReg LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'SNP1', 'SNP2', 'ZSQ',
+        LDSPEC LD and DLD scores, with columns ['CHR', 'SNP', 'BP', 'SNP1', 'SNP2', 'ZSQ',
         'LD:AN:name1', 'LD:AN:name2', 'DLD:pAN:name1', 'DLD:pAN:name2', ...].
         If `SNP1|SNP2` in `df_reg`, `SNP1` and `SNP2` must both be in `df_reg`.
     dic_block : dict
         Block information. `dic_block[i] = (ind_s, ind_e)`.
     n_sample_zsq : int
         Number of samples used to compute the sumstats.
+    null_model : list of str
+        List of scores used in the null model for model evaluation. E.g.,
+        ['LD:AN:Backgrd_Selection_Stat_common', 'LD:AN:Backgrd_Selection_Stat_lf',
+        'LD:AN:CpG_common', 'LD:AN:CpG_lf', 'LD:AN:LLD_AFR_common', ...]
 
     Returns
     -------
     dic_res_reg : dict
         Regression results.
-
-        - dic_res_reg['term'] : list of terms.
-        - dic_res_reg['coef'] : estimated coefs. np.ndarray(dtype=np.float32).
-        - dic_res_reg['coef_jn'] : JN estimated coefs. np.ndarray(dtype=np.float32).
-        - dic_res_reg['coef_jn_cov'] : estimated coef covariance. np.ndarray(dtype=np.float32).
-
+        - dic_res_reg['term'] : scores used in regression, e.g., ['LD:AN1', 'DLD:pAN1', 'E'].
+        - dic_res_reg['coef'] : coefficient estimates (tau and omega).
+        - dic_res_reg['coef_jn'] : JN-debiased estimates (tau and omega).
+        - dic_res_reg['coef_jn_cov'] : JN estimate of coefficient covariance.
+        - dic_res_reg['coef_block'] : coefficient estimates for each JN block of shape (n_jn_block, n_coef).
+        - dic_res_reg['v_h'] : JN block weights of shape (n_jn_block,).
     """
 
     start_time = time.time()
@@ -815,7 +811,7 @@ def regress(
     reg_list = LD_list + DLD_list + ["E"]
 
     if verbose:
-        print(verbose_prefix + "# Call: gdreg.regress.regress")
+        print(verbose_prefix + "# Call: ldspec.regress.regress")
         print(
             verbose_prefix
             + "    n_snp=%d, n_block=%d, n_sample_zsq=%d"
@@ -866,14 +862,6 @@ def regress(
 
     mat_X = (mat_X.T * v_w).T
     v_y = v_y * v_w
-
-    #     coef, coef_mean, coef_cov = reg_bjn(v_y, mat_X, dic_block)
-    #     dic_res_reg = {
-    #         "term": reg_list,
-    #         "coef": coef,
-    #         "coef_jn": coef_mean,
-    #         "coef_jn_cov": coef_cov,
-    #     }
 
     dic_jn = reg_bjn(v_y, mat_X, dic_block)
     dic_res_reg = {
@@ -944,7 +932,7 @@ def regress(
             dic_eval["%s.dif_z" % term] = (
                 dic_eval["%s.dif" % term] / dic_eval["%s.null_se" % term]
             )
-            dic_eval["%s.dif_p" % term] = gdreg.util.zsc2pval(
+            dic_eval["%s.dif_p" % term] = ldspec.util.zsc2pval(
                 dic_eval["%s.dif_z" % term], option="two-sided"
             )
 
@@ -982,20 +970,18 @@ def reg_bjn(v_y, mat_X, dic_block, verbose=False):
         Regressors of shape (n_sample, n_regressor).
     dic_block : dict
         Block information. `dic_block[i] = (ind_s, ind_e)`.
-    verbose :  bool, default=False
-        If to output messages.
 
     Returns
     -------
-    coef : np.ndarray(dtype=np.float32)
+    dic_res['coef'] : np.ndarray(dtype=np.float32)
         Estimates using full data of shape (n_regressor,).
-    coef_mean : np.ndarray(dtype=np.float32)
+    dic_res['coef_mean'] : np.ndarray(dtype=np.float32)
         JN bias-corrected estimates of shape (n_regressor,).
-    coef_cov : np.ndarray(dtype=np.float32)
+    dic_res['coef_cov'] : np.ndarray(dtype=np.float32)
         JN covariance of shape (n_regressor, n_regressor).
-    coef_block : np.ndarray(dtype=np.float32)
+    dic_res['coef_block'] : np.ndarray(dtype=np.float32)
         JN estimates of shape (n_block, n_regressor)
-    v_h : np.ndarray(dtype=np.float32)
+    dic_res['v_h'] : np.ndarray(dtype=np.float32)
         n_sample / v_sample_block of shape (n_block,)
     """
 
@@ -1017,7 +1003,7 @@ def reg_bjn(v_y, mat_X, dic_block, verbose=False):
     assert (n_0 == 0) & (n_g1 == 0), err_msg
 
     if verbose:
-        print("# Call: gdreg.regress.reg_bjn")
+        print("# Call: ldspec.regress.reg_bjn")
         print(
             "    n_sample=%d, n_regressor=%d, n_block=%d"
             % (n_sample, n_regressor, n_block)
@@ -1051,20 +1037,6 @@ def reg_bjn(v_y, mat_X, dic_block, verbose=False):
     }
 
     return dic_res
-
-
-#     coef_mean = (-coef_block + coef).sum(axis=0) + (coef_block.T / v_h).sum(axis=1)
-
-#     mat_tau = np.zeros([n_block, n_regressor], dtype=np.float32)
-#     for i in np.arange(n_block):
-#         mat_tau[i, :] = v_h[i] * coef - (v_h[i] - 1) * coef_block[i, :]
-
-#     coef_cov = np.zeros([n_regressor, n_regressor], dtype=np.float32)
-#     for i in np.arange(n_block):
-#         temp_v = mat_tau[i, :] - coef_mean
-#         coef_cov += np.outer(temp_v, temp_v) / n_block / (v_h[i] - 1)
-
-#     return coef, coef_mean, coef_cov
 
 
 def bjn(v_esti, mat_esti_jn, v_h):
