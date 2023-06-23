@@ -163,14 +163,6 @@ def main(args):
                 "maf_%s_block" % mbin if FLAG_MAF_BLOCK else "maf_%s_geomean" % mbin
             )
             file_name = "%s.%s.%s.c%d" % (str_prox, str_ld, str_maf, CHR)
-            #             file_name = "proxy_%d_%d%s.maf_%s_%s.c%d" % (
-            #                 DIST_LB,
-            #                 DIST_UB,
-            #                 '' if LD_FILE is None else '.ld_%s_%s' % (LDLB_str, LDUB_str)
-            #                 mbin,
-            #                 'block' if FLAG_MAF_BLOCK else 'geomean',
-            #                 CHR,
-            #             )
             print("%-50s" % file_name, "n_pair=%d" % len(snp_pair_list))
             ldspec.util.write_pannot_mat(
                 snp_pair_list, list(df_snp_chr["SNP"]), OUT_PATH + "/" + file_name
