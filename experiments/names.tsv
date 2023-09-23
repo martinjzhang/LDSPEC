@@ -1,0 +1,468 @@
+ldsc	S-LDSC
+md_bsl	baseline
+md_prox_gene_fct_all_ld	baseline-SP
+md_prox_all_ld	baseline-SP-proximity
+md_gene_all_ld	baseline-SP-gene
+md_fct_all_ld	baseline-SP-functional
+common	common
+common_short	C
+common_common	common
+common_common_short	C
+common_block	common
+common_block_short	C
+lf	low-freq
+lf_short	LF
+lf_lf	low-freq
+lf_lf_short	LF
+lf_block	low-freq
+lf_block_short	LF
+h2	heritability
+h2s	single-SNP heritability
+h2p	SNP-pair heritability
+h2_enrich	heritability enrichment
+h2_shrink	heritability shrinkage
+h2_enrich_shrink	heritability enrichment shrinkage
+tau	tau
+omega	omega
+cov	SNP-pair effect covariance
+cor	SNP-pair effect correlation
+ecov	excess SNP-pair effect covariance
+ecor	excess SNP-pair effect correlation
+loglss	$logl_{ss}$
+sqe	SSE
+abe	SAE
+biochemistry_AlanineAminotransferase	Alanine Aminotransferase
+biochemistry_Albumin	Albumin
+biochemistry_AlkalinePhosphatase	Alkaline Phosphatase
+biochemistry_ApolipoproteinA	Apolipoprotein A
+biochemistry_ApolipoproteinB	Apolipoprotein B
+biochemistry_AspartateAminotransferase	Aspartate Aminotransferase
+biochemistry_Calcium	Calcium
+biochemistry_Cholesterol	Cholesterol
+biochemistry_CreactiveProtein	C-reactive Protein
+biochemistry_Creatinine	Creatinine
+biochemistry_CystatinC	Cystatin C
+biochemistry_DirectBilirubin	Direct Bilirubin
+biochemistry_GammaGlutamyltransferase	Gamma Glutamyl Transferase
+biochemistry_Glucose	Glucose
+biochemistry_HDLcholesterol	HDL Cholesterol
+biochemistry_HbA1c	HbA1c
+biochemistry_IGF1	IGF1
+biochemistry_LDLdirect	LDL Direct
+biochemistry_Phosphate	Phosphate
+biochemistry_SHBG	SHBG
+biochemistry_TotalBilirubin	Total Bilirubin
+biochemistry_TotalProtein	Total Protein
+biochemistry_Triglycerides	Triglycerides
+biochemistry_Urate	Urate
+biochemistry_Urea	Urea
+biochemistry_VitaminD	Vitamin D
+blood_EOSINOPHIL_COUNT	Eosinophil Count
+blood_HIGH_LIGHT_SCATTER_RETICULOCYTE_COUNT	High Light Scatter Reticulocyte Count
+blood_LYMPHOCYTE_COUNT	Lymphocyte Count
+blood_MEAN_CORPUSCULAR_HEMOGLOBIN	Mean Corpular Hemoglobin
+blood_MEAN_PLATELET_VOL	Mean Platelet Volume
+blood_MEAN_SPHERED_CELL_VOL	Mean Sphered Cell Volume
+blood_MONOCYTE_COUNT	Monocyte Count
+blood_PLATELET_COUNT	Platelet Count
+blood_PLATELET_DISTRIB_WIDTH	Platelet Distribution Width
+blood_RBC_DISTRIB_WIDTH	Red Blood Cell Distribution Width
+blood_RED_COUNT	Red Blood Cell Count
+blood_WHITE_COUNT	White Blood Cell Count
+bmd_HEEL_TSCOREz	Heel T Score
+body_BALDING1	Balding Type I
+body_BALDING4	Balding Type IV
+body_BMIz	BMI
+body_HEIGHTz	Height
+body_WHRadjBMIz	Waist-hip Ratio
+bp_DIASTOLICadjMEDz	Diastolic Blood Pressure
+bp_SYSTOLICadjMEDz	Systolic Blood Pressure
+cov_EDU_COLLEGE	College Education
+cov_EDU_YEARS	Years of Education
+cov_SMOKING_STATUS	Smoking Status
+disease_AID_ALL	Auto Immune Traits
+disease_ALLERGY_ECZEMA_DIAGNOSED	Eczema
+disease_ASTHMA_DIAGNOSED	Asthma
+disease_CARDIOVASCULAR	Cardiovascular Diseases
+disease_DIABETES_ANY_DIAGNOSED	Diabetes
+disease_ENDOCRINE_DIABETES	Endocrine and Diabetes Diseases
+disease_HI_CHOL_SELF_REP	High Cholesterol
+disease_HYPERTENSION_DIAGNOSED	Hyperthension
+disease_HYPOTHYROIDISM_SELF_REP	Hypothyroidism
+disease_RESPIRATORY_ENT	Respiratory and Ear-nose-throat Diseases
+disease_T2D	Type 2 Diabetes
+disease_THYROID_ANY_SELF_REP	Thyroid
+impedance_BASAL_METABOLIC_RATEz	Basal Metabolic Rate
+lung_FEV1FVCzSMOKE	FEV1-FVC Ratio
+lung_FVCzSMOKE	Forced Vital Capacity (FVC)
+mental_NEUROTICISM	Neuroticism
+other_MORNINGPERSON	Morning Person
+repro_AgeFirstBirth_Female	Age at First Birth (Female)
+repro_MENARCHE_AGE	Age at Menarche
+repro_MENOPAUSE_AGE	Age at Menopause
+repro_NumberChildrenEverBorn_Pooled	Number Children (Pooled)
+BivFlnk	Flanking bivalent TSS/enhancer
+Conserved_LindbladToh	Conserved (Lindblad-Toh)
+Conserved_Vertebrate_phastCons46way	Conserved in vertebrates (phastCons)
+Conserved_Mammal_phastCons46way	Conserved in mammals (phastCons)
+Conserved_Primate_phastCons46way	Conserved in primates (phastCons)
+Coding_UCSC	Coding
+UTR_3_UCSC	3UTR
+UTR_5_UCSC	5UTR
+Intron_UCSC	Intron
+Enhancer_Andersson	FANTOM5 enhancer
+SuperEnhancer_Hnisz	Super enhancer (Hnisz)
+Enhancer_Hoffman	Enhancer
+WeakEnhancer_Hoffman	Weak enhancer
+Promoter_UCSC	Promoter
+PromoterFlanking_Hoffman	Promoter flanking
+DHS_Trynka	DHS
+DHS_peaks_Trynka	DHS peaks
+FetalDHS_Trynka	Fetal DHS
+H3K27ac_Hnisz	H3K27ac
+H3K27ac_PGC2	H3K27ac (PGC2)
+H3K4me1_Trynka	H3K4me1
+H3K4me1_peaks_Trynka	H3K4me1 peaks
+H3K4me3_Trynka	H3K4me3
+H3K4me3_peaks_Trynka	H3K4me3 peaks
+H3K9ac_Trynka	H3K9ac
+H3K9ac_peaks_Trynka	H3K9ac peaks
+TFBS_ENCODE	TFBS
+Transcribed_Hoffman	Transcribed
+TSS_Hoffman	TSS
+CTCF_Hoffman	CTCF
+DGF_ENCODE	DGF
+Repressed_Hoffman	Repressed
+Vahedi_Tcell_SE	Super enhancer (Vahedi)
+Vahedi_Tcell_TE	Typical enhancer
+GerpRS_g4	Conserved (GERP RS >= 4)
+GerpN	Conserved (GERP NS)
+alleleage	MAF-adjusted predicted allele age
+LLD_AFR	MAF-adjusted LLD-AFR
+nucleotide_div	Nucleotide diversity
+recomb_rate	Recombination rate
+Backgrd_Selection_Stat	McVicker B statistics
+CpG	CpG content
+CADD_g20	Deleterious (CADD >= 20)
+snpeff_nonsynonymous_variant	Non-synonymous
+snpeff_synonymous_variant	Synonymous
+BivFlnk.flanking	Flanking bivalent TSS/enhancer + 500bp
+Conserved_LindbladToh.flanking	Conserved (Lindblad-Toh) + 500bp
+Conserved_Vertebrate_phastCons46way.flanking	Conserved in vertebrates (phastCons) + 500bp
+Conserved_Mammal_phastCons46way.flanking	Conserved in mammals (phastCons) + 500bp
+Conserved_Primate_phastCons46way.flanking	Conserved in primates (phastCons) + 500bp
+Coding_UCSC.flanking	Coding + 500bp
+UTR_3_UCSC.flanking	3UTR + 500bp
+UTR_5_UCSC.flanking	5UTR + 500bp
+Intron_UCSC.flanking	Intron + 500bp
+Enhancer_Andersson.flanking	FANTOM5 enhancer + 500bp
+SuperEnhancer_Hnisz.flanking	Super enhancer (Hnisz) + 500bp
+Enhancer_Hoffman.flanking	Enhancer + 500bp
+WeakEnhancer_Hoffman.flanking	Weak enhancer + 500bp
+Promoter_UCSC.flanking	Promoter + 500bp
+PromoterFlanking_Hoffman.flanking	Promoter flanking + 500bp
+DHS_Trynka.flanking	DHS + 500bp
+DHS_peaks_Trynka.flanking	DHS peaks + 500bp
+FetalDHS_Trynka.flanking	Fetal DHS + 500bp
+H3K27ac_Hnisz.flanking	H3K27ac + 500bp
+H3K27ac_PGC2.flanking	H3K27ac (PGC2) + 500bp
+H3K4me1_Trynka.flanking	H3K4me1 + 500bp
+H3K4me1_peaks_Trynka.flanking	H3K4me1 peaks + 500bp
+H3K4me3_Trynka.flanking	H3K4me3 + 500bp
+H3K4me3_peaks_Trynka.flanking	H3K4me3 peaks + 500bp
+H3K9ac_Trynka.flanking	H3K9ac + 500bp
+H3K9ac_peaks_Trynka.flanking	H3K9ac peaks + 500bp
+TFBS_ENCODE.flanking	TFBS + 500bp
+Transcribed_Hoffman.flanking	Transcribed + 500bp
+TSS_Hoffman.flanking	TSS + 500bp
+CTCF_Hoffman.flanking	CTCF + 500bp
+DGF_ENCODE.flanking	DGF + 500bp
+Repressed_Hoffman.flanking	Repressed + 500bp
+Vahedi_Tcell_SE.flanking	Super enhancer (Vahedi) + 500bp
+Vahedi_Tcell_TE.flanking	Typical enhancer + 500bp
+GerpRS_g4.flanking	Conserved (GERP RS >= 4) + 500bp
+GerpN.flanking	Conserved (GERP NS) + 500bp
+alleleage.flanking	MAF-adjusted predicted allele age + 500bp
+LLD_AFR.flanking	MAF-adjusted LLD-AFR + 500bp
+nucleotide_div.flanking	Nucleotide diversity + 500bp
+recomb_rate.flanking	Recombination rate + 500bp
+Backgrd_Selection_Stat.flanking	McVicker B statistics + 500bp
+CpG.flanking	CpG content + 500bp
+CADD_g20.flanking	Deleterious (CADD >= 20) + 500bp
+snpeff_nonsynonymous_variant.flanking	Non-synonymous + 500bp
+snpeff_synonymous_variant.flanking	Synonymous + 500bp
+proxy_0_100	Proximal 0-100bp
+proxy_100_1000	Proximal 100bp-1kb
+proxy_1000_10000	Proximal 1-10kb
+exon	Same-exon
+exonic_gene	Same-gene exonic
+cS2G_promoter	Same-gene promoter
+protein_domain	Same-protein-domain
+gene	Same-gene
+H3K27ac_Hnisz_proxy_0_100	H3K27ac-100
+H3K27ac_PGC2_proxy_0_100	H3K27ac (PGC2)-100
+H3K4me1_Trynka_proxy_0_100	H3K4me1-100
+Intron_UCSC_proxy_0_100	Intron-100
+Repressed_Hoffman_proxy_0_100	Repressed-100
+SuperEnhancer_Hnisz_proxy_0_100	Super enhancer-100
+Transcribed_Hoffman_proxy_0_100	Transcribed-100
+DGF_ENCODE_proxy_0_1000	DGF-1k
+DHS_Trynka_proxy_0_1000	DHS-1k
+DHS_peaks_Trynka_proxy_0_1000	DHS peaks-1k
+Enhancer_Hoffman_proxy_0_1000	Enhancer-1k
+FetalDHS_Trynka_proxy_0_1000	Fetal DHS-1k
+H3K27ac_Hnisz_proxy_0_1000	H3K27ac-1k
+H3K27ac_PGC2_proxy_0_1000	H3K27ac (PGC2)-1k
+H3K4me1_Trynka_proxy_0_1000	H3K4me1-1k
+H3K4me1_peaks_Trynka_proxy_0_1000	H3K4me1 peaks-1k
+H3K4me3_Trynka_proxy_0_1000	H3K4me3-1k
+H3K9ac_Trynka_proxy_0_1000	H3K9ac-1k
+Intron_UCSC_proxy_0_1000	Intron-1k
+Promoter_UCSC_proxy_0_1000	Promoter-1k
+Repressed_Hoffman_proxy_0_1000	Repressed-1k
+SuperEnhancer_Hnisz_proxy_0_1000	Super enhancer-1k
+TFBS_ENCODE_proxy_0_1000	TFBS-1k
+Transcribed_Hoffman_proxy_0_1000	Transcribed-1k
+Vahedi_Tcell_SE_proxy_0_1000	Super enhancer (Vahedi)-1k
+Vahedi_Tcell_TE_proxy_0_1000	Typical enhancer-1k
+AN:mbin0_common	Common-mbin 0
+AN:mbin1_common	Common-mbin 1
+AN:mbin2_common	Common-mbin 2
+AN:mbin3_common	Common-mbin 3
+AN:mbin4_common	Common-mbin 4
+AN:mbin5_common	Common-mbin 5
+AN:mbin6_common	Common-mbin 6
+AN:mbin7_common	Common-mbin 7
+AN:mbin8_common	Common-mbin 8
+AN:mbin9_common	Common-mbin 9
+AN:mbin0_lf	LF-mbin 0
+AN:mbin1_lf	LF-mbin 1
+AN:mbin2_lf	LF-mbin 2
+AN:mbin3_lf	LF-mbin 3
+AN:mbin4_lf	LF-mbin 4
+AN:BivFlnk_common	Flanking bivalent TSS/enhancer (C)
+AN:Conserved_LindbladToh_common	Conserved (Lindblad-Toh) (C)
+AN:Conserved_Vertebrate_phastCons46way_common	Conserved in vertebrates (phastCons) (C)
+AN:Conserved_Mammal_phastCons46way_common	Conserved in mammals (phastCons) (C)
+AN:Conserved_Primate_phastCons46way_common	Conserved in primates (phastCons) (C)
+AN:Coding_UCSC_common	Coding (C)
+AN:UTR_3_UCSC_common	3UTR (C)
+AN:UTR_5_UCSC_common	5UTR (C)
+AN:Intron_UCSC_common	Intron (C)
+AN:Enhancer_Andersson_common	FANTOM5 enhancer (C)
+AN:SuperEnhancer_Hnisz_common	Super enhancer (Hnisz) (C)
+AN:Enhancer_Hoffman_common	Enhancer (C)
+AN:WeakEnhancer_Hoffman_common	Weak enhancer (C)
+AN:Promoter_UCSC_common	Promoter (C)
+AN:PromoterFlanking_Hoffman_common	Promoter flanking (C)
+AN:DHS_Trynka_common	DHS (C)
+AN:DHS_peaks_Trynka_common	DHS peaks (C)
+AN:FetalDHS_Trynka_common	Fetal DHS (C)
+AN:H3K27ac_Hnisz_common	H3K27ac (C)
+AN:H3K27ac_PGC2_common	H3K27ac (PGC2) (C)
+AN:H3K4me1_Trynka_common	H3K4me1 (C)
+AN:H3K4me1_peaks_Trynka_common	H3K4me1 peaks (C)
+AN:H3K4me3_Trynka_common	H3K4me3 (C)
+AN:H3K4me3_peaks_Trynka_common	H3K4me3 peaks (C)
+AN:H3K9ac_Trynka_common	H3K9ac (C)
+AN:H3K9ac_peaks_Trynka_common	H3K9ac peaks (C)
+AN:TFBS_ENCODE_common	TFBS (C)
+AN:Transcribed_Hoffman_common	Transcribed (C)
+AN:TSS_Hoffman_common	TSS (C)
+AN:CTCF_Hoffman_common	CTCF (C)
+AN:DGF_ENCODE_common	DGF (C)
+AN:Repressed_Hoffman_common	Repressed (C)
+AN:Vahedi_Tcell_SE_common	Super enhancer (Vahedi) (C)
+AN:Vahedi_Tcell_TE_common	Typical enhancer (C)
+AN:GerpRS_g4_common	Conserved (GERP RS >= 4) (C)
+AN:GerpN_common	Conserved (GERP NS) (C)
+AN:alleleage_common	MAF-adjusted predicted allele age (C)
+AN:LLD_AFR_common	MAF-adjusted LLD-AFR (C)
+AN:nucleotide_div_common	Nucleotide diversity (C)
+AN:recomb_rate_common	Recombination rate (C)
+AN:Backgrd_Selection_Stat_common	McVicker B statistics (C)
+AN:CpG_common	CpG content (C)
+AN:CADD_g20_common	Deleterious (CADD >= 20) (C)
+AN:snpeff_nonsynonymous_variant_common	Non-synonymous (C)
+AN:snpeff_synonymous_variant_common	Synonymous (C)
+AN:BivFlnk_lf	Flanking bivalent TSS/enhancer (LF)
+AN:Conserved_LindbladToh_lf	Conserved (Lindblad-Toh) (LF)
+AN:Conserved_Vertebrate_phastCons46way_lf	Conserved in vertebrates (phastCons) (LF)
+AN:Conserved_Mammal_phastCons46way_lf	Conserved in mammals (phastCons) (LF)
+AN:Conserved_Primate_phastCons46way_lf	Conserved in primates (phastCons) (LF)
+AN:Coding_UCSC_lf	Coding (LF)
+AN:UTR_3_UCSC_lf	3UTR (LF)
+AN:UTR_5_UCSC_lf	5UTR (LF)
+AN:Intron_UCSC_lf	Intron (LF)
+AN:Enhancer_Andersson_lf	FANTOM5 enhancer (LF)
+AN:SuperEnhancer_Hnisz_lf	Super enhancer (Hnisz) (LF)
+AN:Enhancer_Hoffman_lf	Enhancer (LF)
+AN:WeakEnhancer_Hoffman_lf	Weak enhancer (LF)
+AN:Promoter_UCSC_lf	Promoter (LF)
+AN:PromoterFlanking_Hoffman_lf	Promoter flanking (LF)
+AN:DHS_Trynka_lf	DHS (LF)
+AN:DHS_peaks_Trynka_lf	DHS peaks (LF)
+AN:FetalDHS_Trynka_lf	Fetal DHS (LF)
+AN:H3K27ac_Hnisz_lf	H3K27ac (LF)
+AN:H3K27ac_PGC2_lf	H3K27ac (PGC2) (LF)
+AN:H3K4me1_Trynka_lf	H3K4me1 (LF)
+AN:H3K4me1_peaks_Trynka_lf	H3K4me1 peaks (LF)
+AN:H3K4me3_Trynka_lf	H3K4me3 (LF)
+AN:H3K4me3_peaks_Trynka_lf	H3K4me3 peaks (LF)
+AN:H3K9ac_Trynka_lf	H3K9ac (LF)
+AN:H3K9ac_peaks_Trynka_lf	H3K9ac peaks (LF)
+AN:TFBS_ENCODE_lf	TFBS (LF)
+AN:Transcribed_Hoffman_lf	Transcribed (LF)
+AN:TSS_Hoffman_lf	TSS (LF)
+AN:CTCF_Hoffman_lf	CTCF (LF)
+AN:DGF_ENCODE_lf	DGF (LF)
+AN:Repressed_Hoffman_lf	Repressed (LF)
+AN:Vahedi_Tcell_SE_lf	Super enhancer (Vahedi) (LF)
+AN:Vahedi_Tcell_TE_lf	Typical enhancer (LF)
+AN:GerpRS_g4_lf	Conserved (GERP RS >= 4) (LF)
+AN:GerpN_lf	Conserved (GERP NS) (LF)
+AN:alleleage_lf	MAF-adjusted predicted allele age (LF)
+AN:LLD_AFR_lf	MAF-adjusted LLD-AFR (LF)
+AN:nucleotide_div_lf	Nucleotide diversity (LF)
+AN:recomb_rate_lf	Recombination rate (LF)
+AN:Backgrd_Selection_Stat_lf	McVicker B statistics (LF)
+AN:CpG_lf	CpG content (LF)
+AN:CADD_g20_lf	Deleterious (CADD >= 20) (LF)
+AN:snpeff_nonsynonymous_variant_lf	Non-synonymous (LF)
+AN:snpeff_synonymous_variant_lf	Synonymous (LF)
+pAN:proxy_0_100_ld_n100_p0_maf_lf_block	Proximal 0-100bp (low-freq neg-LD)
+pAN:proxy_100_1000_ld_n100_p0_maf_lf_block	Proximal 100bp-1kb (low-freq neg-LD)
+pAN:proxy_1000_10000_ld_n100_p0_maf_lf_block	Proximal 1-10kb (low-freq neg-LD)
+pAN:exon_ld_n100_p0_maf_lf_block	Same-exon (low-freq neg-LD)
+pAN:exonic_gene_ld_n100_p0_maf_lf_block	Same-gene exonic (low-freq neg-LD)
+pAN:cS2G_promoter_ld_n100_p0_maf_lf_block	Same-gene promoter (low-freq neg-LD)
+pAN:protein_domain_ld_n100_p0_maf_lf_block	Same-protein-domain (low-freq neg-LD)
+pAN:gene_ld_n100_p0_maf_lf_block	Same-gene (low-freq neg-LD)
+pAN:H3K27ac_Hnisz_proxy_0_100_ld_n100_p0_maf_lf_block	H3K27ac-100 (low-freq neg-LD)
+pAN:H3K27ac_PGC2_proxy_0_100_ld_n100_p0_maf_lf_block	H3K27ac (PGC2)-100 (low-freq neg-LD)
+pAN:H3K4me1_Trynka_proxy_0_100_ld_n100_p0_maf_lf_block	H3K4me1-100 (low-freq neg-LD)
+pAN:Intron_UCSC_proxy_0_100_ld_n100_p0_maf_lf_block	Intron-100 (low-freq neg-LD)
+pAN:Repressed_Hoffman_proxy_0_100_ld_n100_p0_maf_lf_block	Repressed-100 (low-freq neg-LD)
+pAN:SuperEnhancer_Hnisz_proxy_0_100_ld_n100_p0_maf_lf_block	Super enhancer-100 (low-freq neg-LD)
+pAN:Transcribed_Hoffman_proxy_0_100_ld_n100_p0_maf_lf_block	Transcribed-100 (low-freq neg-LD)
+pAN:DGF_ENCODE_proxy_0_1000_ld_n100_p0_maf_lf_block	DGF-1k (low-freq neg-LD)
+pAN:DHS_Trynka_proxy_0_1000_ld_n100_p0_maf_lf_block	DHS-1k (low-freq neg-LD)
+pAN:DHS_peaks_Trynka_proxy_0_1000_ld_n100_p0_maf_lf_block	DHS peaks-1k (low-freq neg-LD)
+pAN:Enhancer_Hoffman_proxy_0_1000_ld_n100_p0_maf_lf_block	Enhancer-1k (low-freq neg-LD)
+pAN:FetalDHS_Trynka_proxy_0_1000_ld_n100_p0_maf_lf_block	Fetal DHS-1k (low-freq neg-LD)
+pAN:H3K27ac_Hnisz_proxy_0_1000_ld_n100_p0_maf_lf_block	H3K27ac-1k (low-freq neg-LD)
+pAN:H3K27ac_PGC2_proxy_0_1000_ld_n100_p0_maf_lf_block	H3K27ac (PGC2)-1k (low-freq neg-LD)
+pAN:H3K4me1_Trynka_proxy_0_1000_ld_n100_p0_maf_lf_block	H3K4me1-1k (low-freq neg-LD)
+pAN:H3K4me1_peaks_Trynka_proxy_0_1000_ld_n100_p0_maf_lf_block	H3K4me1 peaks-1k (low-freq neg-LD)
+pAN:H3K4me3_Trynka_proxy_0_1000_ld_n100_p0_maf_lf_block	H3K4me3-1k (low-freq neg-LD)
+pAN:H3K9ac_Trynka_proxy_0_1000_ld_n100_p0_maf_lf_block	H3K9ac-1k (low-freq neg-LD)
+pAN:Intron_UCSC_proxy_0_1000_ld_n100_p0_maf_lf_block	Intron-1k (low-freq neg-LD)
+pAN:Promoter_UCSC_proxy_0_1000_ld_n100_p0_maf_lf_block	Promoter-1k (low-freq neg-LD)
+pAN:Repressed_Hoffman_proxy_0_1000_ld_n100_p0_maf_lf_block	Repressed-1k (low-freq neg-LD)
+pAN:SuperEnhancer_Hnisz_proxy_0_1000_ld_n100_p0_maf_lf_block	Super enhancer-1k (low-freq neg-LD)
+pAN:TFBS_ENCODE_proxy_0_1000_ld_n100_p0_maf_lf_block	TFBS-1k (low-freq neg-LD)
+pAN:Transcribed_Hoffman_proxy_0_1000_ld_n100_p0_maf_lf_block	Transcribed-1k (low-freq neg-LD)
+pAN:Vahedi_Tcell_SE_proxy_0_1000_ld_n100_p0_maf_lf_block	Super enhancer (Vahedi)-1k (low-freq neg-LD)
+pAN:Vahedi_Tcell_TE_proxy_0_1000_ld_n100_p0_maf_lf_block	Typical enhancer-1k (low-freq neg-LD)
+pAN:proxy_0_100_ld_n100_p0_maf_common_block	Proximal 0-100bp (common neg-LD)
+pAN:proxy_100_1000_ld_n100_p0_maf_common_block	Proximal 100bp-1kb (common neg-LD)
+pAN:proxy_1000_10000_ld_n100_p0_maf_common_block	Proximal 1-10kb (common neg-LD)
+pAN:exon_ld_n100_p0_maf_common_block	Same-exon (common neg-LD)
+pAN:exonic_gene_ld_n100_p0_maf_common_block	Same-gene exonic (common neg-LD)
+pAN:cS2G_promoter_ld_n100_p0_maf_common_block	Same-gene promoter (common neg-LD)
+pAN:protein_domain_ld_n100_p0_maf_common_block	Same-protein-domain (common neg-LD)
+pAN:gene_ld_n100_p0_maf_common_block	Same-gene (common neg-LD)
+pAN:H3K27ac_Hnisz_proxy_0_100_ld_n100_p0_maf_common_block	H3K27ac-100 (common neg-LD)
+pAN:H3K27ac_PGC2_proxy_0_100_ld_n100_p0_maf_common_block	H3K27ac (PGC2)-100 (common neg-LD)
+pAN:H3K4me1_Trynka_proxy_0_100_ld_n100_p0_maf_common_block	H3K4me1-100 (common neg-LD)
+pAN:Intron_UCSC_proxy_0_100_ld_n100_p0_maf_common_block	Intron-100 (common neg-LD)
+pAN:Repressed_Hoffman_proxy_0_100_ld_n100_p0_maf_common_block	Repressed-100 (common neg-LD)
+pAN:SuperEnhancer_Hnisz_proxy_0_100_ld_n100_p0_maf_common_block	Super enhancer-100 (common neg-LD)
+pAN:Transcribed_Hoffman_proxy_0_100_ld_n100_p0_maf_common_block	Transcribed-100 (common neg-LD)
+pAN:DGF_ENCODE_proxy_0_1000_ld_n100_p0_maf_common_block	DGF-1k (common neg-LD)
+pAN:DHS_Trynka_proxy_0_1000_ld_n100_p0_maf_common_block	DHS-1k (common neg-LD)
+pAN:DHS_peaks_Trynka_proxy_0_1000_ld_n100_p0_maf_common_block	DHS peaks-1k (common neg-LD)
+pAN:Enhancer_Hoffman_proxy_0_1000_ld_n100_p0_maf_common_block	Enhancer-1k (common neg-LD)
+pAN:FetalDHS_Trynka_proxy_0_1000_ld_n100_p0_maf_common_block	Fetal DHS-1k (common neg-LD)
+pAN:H3K27ac_Hnisz_proxy_0_1000_ld_n100_p0_maf_common_block	H3K27ac-1k (common neg-LD)
+pAN:H3K27ac_PGC2_proxy_0_1000_ld_n100_p0_maf_common_block	H3K27ac (PGC2)-1k (common neg-LD)
+pAN:H3K4me1_Trynka_proxy_0_1000_ld_n100_p0_maf_common_block	H3K4me1-1k (common neg-LD)
+pAN:H3K4me1_peaks_Trynka_proxy_0_1000_ld_n100_p0_maf_common_block	H3K4me1 peaks-1k (common neg-LD)
+pAN:H3K4me3_Trynka_proxy_0_1000_ld_n100_p0_maf_common_block	H3K4me3-1k (common neg-LD)
+pAN:H3K9ac_Trynka_proxy_0_1000_ld_n100_p0_maf_common_block	H3K9ac-1k (common neg-LD)
+pAN:Intron_UCSC_proxy_0_1000_ld_n100_p0_maf_common_block	Intron-1k (common neg-LD)
+pAN:Promoter_UCSC_proxy_0_1000_ld_n100_p0_maf_common_block	Promoter-1k (common neg-LD)
+pAN:Repressed_Hoffman_proxy_0_1000_ld_n100_p0_maf_common_block	Repressed-1k (common neg-LD)
+pAN:SuperEnhancer_Hnisz_proxy_0_1000_ld_n100_p0_maf_common_block	Super enhancer-1k (common neg-LD)
+pAN:TFBS_ENCODE_proxy_0_1000_ld_n100_p0_maf_common_block	TFBS-1k (common neg-LD)
+pAN:Transcribed_Hoffman_proxy_0_1000_ld_n100_p0_maf_common_block	Transcribed-1k (common neg-LD)
+pAN:Vahedi_Tcell_SE_proxy_0_1000_ld_n100_p0_maf_common_block	Super enhancer (Vahedi)-1k (common neg-LD)
+pAN:Vahedi_Tcell_TE_proxy_0_1000_ld_n100_p0_maf_common_block	Typical enhancer-1k (common neg-LD)
+pAN:proxy_0_100_ld_p0_p100_maf_lf_block	Proximal 0-100bp (low-freq pos-LD)
+pAN:proxy_100_1000_ld_p0_p100_maf_lf_block	Proximal 100bp-1kb (low-freq pos-LD)
+pAN:proxy_1000_10000_ld_p0_p100_maf_lf_block	Proximal 1-10kb (low-freq pos-LD)
+pAN:exon_ld_p0_p100_maf_lf_block	Same-exon (low-freq pos-LD)
+pAN:exonic_gene_ld_p0_p100_maf_lf_block	Same-gene exonic (low-freq pos-LD)
+pAN:cS2G_promoter_ld_p0_p100_maf_lf_block	Same-gene promoter (low-freq pos-LD)
+pAN:protein_domain_ld_p0_p100_maf_lf_block	Same-protein-domain (low-freq pos-LD)
+pAN:gene_ld_p0_p100_maf_lf_block	Same-gene (low-freq pos-LD)
+pAN:H3K27ac_Hnisz_proxy_0_100_ld_p0_p100_maf_lf_block	H3K27ac-100 (low-freq pos-LD)
+pAN:H3K27ac_PGC2_proxy_0_100_ld_p0_p100_maf_lf_block	H3K27ac (PGC2)-100 (low-freq pos-LD)
+pAN:H3K4me1_Trynka_proxy_0_100_ld_p0_p100_maf_lf_block	H3K4me1-100 (low-freq pos-LD)
+pAN:Intron_UCSC_proxy_0_100_ld_p0_p100_maf_lf_block	Intron-100 (low-freq pos-LD)
+pAN:Repressed_Hoffman_proxy_0_100_ld_p0_p100_maf_lf_block	Repressed-100 (low-freq pos-LD)
+pAN:SuperEnhancer_Hnisz_proxy_0_100_ld_p0_p100_maf_lf_block	Super enhancer-100 (low-freq pos-LD)
+pAN:Transcribed_Hoffman_proxy_0_100_ld_p0_p100_maf_lf_block	Transcribed-100 (low-freq pos-LD)
+pAN:DGF_ENCODE_proxy_0_1000_ld_p0_p100_maf_lf_block	DGF-1k (low-freq pos-LD)
+pAN:DHS_Trynka_proxy_0_1000_ld_p0_p100_maf_lf_block	DHS-1k (low-freq pos-LD)
+pAN:DHS_peaks_Trynka_proxy_0_1000_ld_p0_p100_maf_lf_block	DHS peaks-1k (low-freq pos-LD)
+pAN:Enhancer_Hoffman_proxy_0_1000_ld_p0_p100_maf_lf_block	Enhancer-1k (low-freq pos-LD)
+pAN:FetalDHS_Trynka_proxy_0_1000_ld_p0_p100_maf_lf_block	Fetal DHS-1k (low-freq pos-LD)
+pAN:H3K27ac_Hnisz_proxy_0_1000_ld_p0_p100_maf_lf_block	H3K27ac-1k (low-freq pos-LD)
+pAN:H3K27ac_PGC2_proxy_0_1000_ld_p0_p100_maf_lf_block	H3K27ac (PGC2)-1k (low-freq pos-LD)
+pAN:H3K4me1_Trynka_proxy_0_1000_ld_p0_p100_maf_lf_block	H3K4me1-1k (low-freq pos-LD)
+pAN:H3K4me1_peaks_Trynka_proxy_0_1000_ld_p0_p100_maf_lf_block	H3K4me1 peaks-1k (low-freq pos-LD)
+pAN:H3K4me3_Trynka_proxy_0_1000_ld_p0_p100_maf_lf_block	H3K4me3-1k (low-freq pos-LD)
+pAN:H3K9ac_Trynka_proxy_0_1000_ld_p0_p100_maf_lf_block	H3K9ac-1k (low-freq pos-LD)
+pAN:Intron_UCSC_proxy_0_1000_ld_p0_p100_maf_lf_block	Intron-1k (low-freq pos-LD)
+pAN:Promoter_UCSC_proxy_0_1000_ld_p0_p100_maf_lf_block	Promoter-1k (low-freq pos-LD)
+pAN:Repressed_Hoffman_proxy_0_1000_ld_p0_p100_maf_lf_block	Repressed-1k (low-freq pos-LD)
+pAN:SuperEnhancer_Hnisz_proxy_0_1000_ld_p0_p100_maf_lf_block	Super enhancer-1k (low-freq pos-LD)
+pAN:TFBS_ENCODE_proxy_0_1000_ld_p0_p100_maf_lf_block	TFBS-1k (low-freq pos-LD)
+pAN:Transcribed_Hoffman_proxy_0_1000_ld_p0_p100_maf_lf_block	Transcribed-1k (low-freq pos-LD)
+pAN:Vahedi_Tcell_SE_proxy_0_1000_ld_p0_p100_maf_lf_block	Super enhancer (Vahedi)-1k (low-freq pos-LD)
+pAN:Vahedi_Tcell_TE_proxy_0_1000_ld_p0_p100_maf_lf_block	Typical enhancer-1k (low-freq pos-LD)
+pAN:proxy_0_100_ld_p0_p100_maf_common_block	Proximal 0-100bp (common pos-LD)
+pAN:proxy_100_1000_ld_p0_p100_maf_common_block	Proximal 100bp-1kb (common pos-LD)
+pAN:proxy_1000_10000_ld_p0_p100_maf_common_block	Proximal 1-10kb (common pos-LD)
+pAN:exon_ld_p0_p100_maf_common_block	Same-exon (common pos-LD)
+pAN:exonic_gene_ld_p0_p100_maf_common_block	Same-gene exonic (common pos-LD)
+pAN:cS2G_promoter_ld_p0_p100_maf_common_block	Same-gene promoter (common pos-LD)
+pAN:protein_domain_ld_p0_p100_maf_common_block	Same-protein-domain (common pos-LD)
+pAN:gene_ld_p0_p100_maf_common_block	Same-gene (common pos-LD)
+pAN:H3K27ac_Hnisz_proxy_0_100_ld_p0_p100_maf_common_block	H3K27ac-100 (common pos-LD)
+pAN:H3K27ac_PGC2_proxy_0_100_ld_p0_p100_maf_common_block	H3K27ac (PGC2)-100 (common pos-LD)
+pAN:H3K4me1_Trynka_proxy_0_100_ld_p0_p100_maf_common_block	H3K4me1-100 (common pos-LD)
+pAN:Intron_UCSC_proxy_0_100_ld_p0_p100_maf_common_block	Intron-100 (common pos-LD)
+pAN:Repressed_Hoffman_proxy_0_100_ld_p0_p100_maf_common_block	Repressed-100 (common pos-LD)
+pAN:SuperEnhancer_Hnisz_proxy_0_100_ld_p0_p100_maf_common_block	Super enhancer-100 (common pos-LD)
+pAN:Transcribed_Hoffman_proxy_0_100_ld_p0_p100_maf_common_block	Transcribed-100 (common pos-LD)
+pAN:DGF_ENCODE_proxy_0_1000_ld_p0_p100_maf_common_block	DGF-1k (common pos-LD)
+pAN:DHS_Trynka_proxy_0_1000_ld_p0_p100_maf_common_block	DHS-1k (common pos-LD)
+pAN:DHS_peaks_Trynka_proxy_0_1000_ld_p0_p100_maf_common_block	DHS peaks-1k (common pos-LD)
+pAN:Enhancer_Hoffman_proxy_0_1000_ld_p0_p100_maf_common_block	Enhancer-1k (common pos-LD)
+pAN:FetalDHS_Trynka_proxy_0_1000_ld_p0_p100_maf_common_block	Fetal DHS-1k (common pos-LD)
+pAN:H3K27ac_Hnisz_proxy_0_1000_ld_p0_p100_maf_common_block	H3K27ac-1k (common pos-LD)
+pAN:H3K27ac_PGC2_proxy_0_1000_ld_p0_p100_maf_common_block	H3K27ac (PGC2)-1k (common pos-LD)
+pAN:H3K4me1_Trynka_proxy_0_1000_ld_p0_p100_maf_common_block	H3K4me1-1k (common pos-LD)
+pAN:H3K4me1_peaks_Trynka_proxy_0_1000_ld_p0_p100_maf_common_block	H3K4me1 peaks-1k (common pos-LD)
+pAN:H3K4me3_Trynka_proxy_0_1000_ld_p0_p100_maf_common_block	H3K4me3-1k (common pos-LD)
+pAN:H3K9ac_Trynka_proxy_0_1000_ld_p0_p100_maf_common_block	H3K9ac-1k (common pos-LD)
+pAN:Intron_UCSC_proxy_0_1000_ld_p0_p100_maf_common_block	Intron-1k (common pos-LD)
+pAN:Promoter_UCSC_proxy_0_1000_ld_p0_p100_maf_common_block	Promoter-1k (common pos-LD)
+pAN:Repressed_Hoffman_proxy_0_1000_ld_p0_p100_maf_common_block	Repressed-1k (common pos-LD)
+pAN:SuperEnhancer_Hnisz_proxy_0_1000_ld_p0_p100_maf_common_block	Super enhancer-1k (common pos-LD)
+pAN:TFBS_ENCODE_proxy_0_1000_ld_p0_p100_maf_common_block	TFBS-1k (common pos-LD)
+pAN:Transcribed_Hoffman_proxy_0_1000_ld_p0_p100_maf_common_block	Transcribed-1k (common pos-LD)
+pAN:Vahedi_Tcell_SE_proxy_0_1000_ld_p0_p100_maf_common_block	Super enhancer (Vahedi)-1k (common pos-LD)
+pAN:Vahedi_Tcell_TE_proxy_0_1000_ld_p0_p100_maf_common_block	Typical enhancer-1k (common pos-LD)

@@ -256,7 +256,8 @@ def summarize(
     res_pAN_list = [
         x.replace("DLD:", "") for x in dic_res["term"] if x.startswith("DLD:")
     ]
-    res_prox_list = [x for x in res_pAN_list if "prox" in x]  # pAN's for proximity
+    # res_prox_list = [x for x in res_pAN_list if "prox" in x]  # pAN's for proximity
+    res_prox_list = [x for x in res_pAN_list if x.startswith("pAN:prox")]  # pAN's for proximity
     err_msg = "df_annot does not contain all annots in dic_res"
     assert len(set(res_AN_list) - set(AN_list)) == 0, err_msg
     err_msg = "dic_pannot_mat does not contain all pannots in dic_res"

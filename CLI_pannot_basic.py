@@ -127,6 +127,8 @@ def main(args):
     print("n_pair", len(snp_list1))
 
     # MAF-bin & write files
+    LD_LB = max(-1, LD_LB)
+    LD_UB = min(1, LD_UB)
     for mbin, maf_lb, maf_ub in zip(df_mbin[0], df_mbin[1], df_mbin[2]):
         temp_snp_list1 = []
         temp_snp_list2 = []
