@@ -271,7 +271,7 @@ def summarize_snp_effect(
     AN_list = [x for x in dic_coef if x.startswith("AN:")]
     pAN_list = [x for x in dic_coef if x.startswith("pAN:")]
     dic_eff = {x: y for x, y in zip(df_effect["SNP"], df_effect["EFF"])}
-    prox_list = [x for x in pAN_list if "prox" in x]  # pAN's for proximity
+    prox_list = [x for x in pAN_list if x.startswith("pAN:prox")]  # pAN's for proximity
 
     if verbose:
         print("# Call: ldspec.simulate.summarize_snp_effect")
@@ -290,11 +290,15 @@ def summarize_snp_effect(
         index=AN_list,
         data={
             "annot": AN_list,
+            "type": "",
             "n_snp": np.nan,
             "p_causal": np.nan,
             "tau": np.nan,
             "h2": np.nan,
+            "scv": np.nan,
             "h2_enrich": np.nan,
+            "scv_enrich": np.nan,
+            "h2_shrink": np.nan,
         },
     )
 
@@ -346,11 +350,28 @@ def summarize_snp_effect(
     df_snp = pd.concat(df_list, axis=0)
     v_y = df_snp["EFF"].values ** 2
     mat_X = df_snp[AN_list].values
-    df_sum_tau["tau"] = ldspec.util.reg(v_y, mat_X)
-    df_sum_tau["n_snp"] = [(df_snp[x] == 1).sum() for x in AN_list]
-    df_sum_tau["p_causal"] = [
-        (df_snp.loc[df_snp[x] == 1, "EFF"] != 0).mean() for x in AN_list
-    ]
+    df_sum_tau["tau"] = ldspec.util.reg(v_y, mat_X)    
+    df_sum_tau["type"] = ["B" if set(df_snp[x]).issubset([0,1]) else "C" for x in AN_list]
+    for AN in AN_list:
+        if df_sum_tau.loc[AN, "type"]!="B": # non-binary annotation
+            continue  
+        df_sum_tau.loc[AN, "n_snp"] = (df_snp[AN] == 1).sum()
+        df_sum_tau.loc[AN, "p_causal"] = (df_snp.loc[df_snp[AN] == 1, "EFF"] != 0).mean()
+
+    # scv & scv_enrich
+    scv_common = (df_snp.loc[df_snp["AN:summary_common"] == 1, "EFF"] ** 2).sum()
+    scv_common_ps = scv_common / max((df_snp["AN:summary_common"] == 1).sum(), 1)
+    scv_lf = (df_snp.loc[df_snp["AN:summary_lf"] == 1, "EFF"] ** 2).sum()
+    scv_lf_ps = scv_lf / max((df_snp["AN:summary_lf"] == 1).sum(), 1)
+    for AN in AN_list:
+        if df_sum_tau.loc[AN, "type"]!="B": # non-binary annotation
+            continue
+        df_sum_tau.loc[AN, "scv"] = np.sum(df_snp.loc[df_snp[AN] == 1, "EFF"] ** 2)
+        scv_ps = df_sum_tau.loc[AN, "scv"] / df_sum_tau.loc[AN, "n_snp"]
+        if AN.endswith("_common"):
+            df_sum_tau.loc[AN, "scv_enrich"] = scv_ps / scv_common_ps
+        if AN.endswith("_lf"):
+            df_sum_tau.loc[AN, "scv_enrich"] = scv_ps / scv_lf_ps
 
     if df_phen is not None:
         h2_common = df_phen["AN:summary_common"].var() / df_phen["TRAIT"].var()
@@ -358,14 +379,18 @@ def summarize_snp_effect(
         h2_lf = df_phen["AN:summary_lf"].var() / df_phen["TRAIT"].var()
         h2_lf_ps = h2_lf / max((df_snp["AN:summary_lf"] == 1).sum(), 1)
         for AN in AN_list:
+            if df_sum_tau.loc[AN, "type"]!="B": # non-binary annotation
+                continue
             df_sum_tau.loc[AN, "h2"] = df_phen[AN].var() / df_phen["TRAIT"].var()
             h2ps = df_sum_tau.loc[AN, "h2"] / df_sum_tau.loc[AN, "n_snp"]
             if AN.endswith("_common"):
                 df_sum_tau.loc[AN, "h2_enrich"] = h2ps / h2_common_ps
             if AN.endswith("_lf"):
                 df_sum_tau.loc[AN, "h2_enrich"] = h2ps / h2_lf_ps
+        df_sum_tau["h2_shrink"] = df_sum_tau["h2"] / df_sum_tau["scv"]
     else:
         df_sum_tau["h2_enrich"] = 0
+        df_sum_tau["h2_shrink"] = 0
 
     v_h2ps = np.zeros(df_snp.shape[0], dtype=np.float32)
     for AN in AN_list:
@@ -676,8 +701,6 @@ def compute_sumstats(df_phen, dic_data, block_size=500, verbose=False):
             mat_X = mat_X.T.astype(np.float32)
             mat_X[mat_X == -9] = np.nan  # Imputation by mean genotype
             v_maf = np.nanmean(mat_X, axis=0) * 0.5  # Imputation by mean genotype
-            #             mat_X[mat_X == -9] = 0
-            #             v_maf = mat_X.mean(axis=0) * 0.5
             mat_X = (mat_X - 2 * v_maf) / np.sqrt(2 * v_maf * (1 - v_maf))
             mat_X[np.isnan(mat_X)] = 0
 
