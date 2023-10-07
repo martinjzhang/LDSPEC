@@ -17,9 +17,10 @@ lf_lf_short	LF
 lf_block	low-freq
 lf_block_short	LF
 h2	heritability
-h2s	single-SNP heritability
+scv	sum of causal effect variance
 h2p	SNP-pair heritability
 h2_enrich	heritability enrichment
+scv_enrich	SCV enrichment
 h2_shrink	heritability shrinkage
 h2_enrich_shrink	heritability enrichment shrinkage
 tau	tau
@@ -87,7 +88,7 @@ disease_CARDIOVASCULAR	Cardiovascular Diseases
 disease_DIABETES_ANY_DIAGNOSED	Diabetes
 disease_ENDOCRINE_DIABETES	Endocrine and Diabetes Diseases
 disease_HI_CHOL_SELF_REP	High Cholesterol
-disease_HYPERTENSION_DIAGNOSED	Hyperthension
+disease_HYPERTENSION_DIAGNOSED	Hypertension
 disease_HYPOTHYROIDISM_SELF_REP	Hypothyroidism
 disease_RESPIRATORY_ENT	Respiratory and Ear-nose-throat Diseases
 disease_T2D	Type 2 Diabetes
@@ -240,6 +241,7 @@ AN:mbin1_lf	LF-mbin 1
 AN:mbin2_lf	LF-mbin 2
 AN:mbin3_lf	LF-mbin 3
 AN:mbin4_lf	LF-mbin 4
+AN:all	All SNPs
 AN:BivFlnk_common	Flanking bivalent TSS/enhancer (C)
 AN:Conserved_LindbladToh_common	Conserved (Lindblad-Toh) (C)
 AN:Conserved_Vertebrate_phastCons46way_common	Conserved in vertebrates (phastCons) (C)

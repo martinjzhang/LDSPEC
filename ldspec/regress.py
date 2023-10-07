@@ -257,7 +257,9 @@ def summarize(
         x.replace("DLD:", "") for x in dic_res["term"] if x.startswith("DLD:")
     ]
     # res_prox_list = [x for x in res_pAN_list if "prox" in x]  # pAN's for proximity
-    res_prox_list = [x for x in res_pAN_list if x.startswith("pAN:prox")]  # pAN's for proximity
+    res_prox_list = [
+        x for x in res_pAN_list if x.startswith("pAN:prox")
+    ]  # pAN's for proximity
     err_msg = "df_annot does not contain all annots in dic_res"
     assert len(set(res_AN_list) - set(AN_list)) == 0, err_msg
     err_msg = "dic_pannot_mat does not contain all pannots in dic_res"
@@ -302,15 +304,15 @@ def summarize(
             "h2": np.nan,  # Total heritability
             "h2_se": np.nan,
             "h2_p": np.nan,
-            "h2s": np.nan,  # Sum of causal effect size variance (SCV)
-            "h2s_se": np.nan,
-            "h2s_p": np.nan,
+            "scv": np.nan,  # Sum of causal effect size variance (SCV)
+            "scv_se": np.nan,
+            "scv_p": np.nan,
             "h2_enrich": np.nan,
             "h2_enrich_se": np.nan,
             "h2_enrich_p": np.nan,
-            "h2s_enrich": np.nan,
-            "h2s_enrich_se": np.nan,
-            "h2s_enrich_p": np.nan,
+            "scv_enrich": np.nan,
+            "scv_enrich_se": np.nan,
+            "scv_enrich_p": np.nan,
             "h2_shrink": np.nan,
             "h2_shrink_se": np.nan,
             "h2_shrink_p": np.nan,
@@ -347,10 +349,10 @@ def summarize(
         "h2.jn": np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
         "h2_enrich": np.zeros(len(res_AN_list), dtype=np.float32),
         "h2_enrich.jn": np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
-        "h2s": np.zeros(len(res_AN_list), dtype=np.float32),
-        "h2s.jn": np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
-        "h2s_enrich": np.zeros(len(res_AN_list), dtype=np.float32),
-        "h2s_enrich.jn": np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
+        "scv": np.zeros(len(res_AN_list), dtype=np.float32),
+        "scv.jn": np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
+        "scv_enrich": np.zeros(len(res_AN_list), dtype=np.float32),
+        "scv_enrich.jn": np.zeros([n_jn_block, len(res_AN_list)], dtype=np.float32),
         "res_pAN_list": res_pAN_list,
         "cov": np.zeros(len(res_pAN_list), dtype=np.float32),
         "cov.jn": np.zeros([n_jn_block, len(res_pAN_list)], dtype=np.float32),
@@ -433,7 +435,7 @@ def summarize(
             )
 
             ref_col_list = (
-                res_AN_list  # ANs used to define reference SNPs for h2s_enrich
+                res_AN_list  # ANs used to define reference SNPs for scv_enrich
             )
             for term in ["_common", "_lf"]:  # C/LF SNPs; if not, use all SNPs
                 if AN.endswith(term):
@@ -522,7 +524,7 @@ def summarize(
                     dtype=np.float32,
                 )
 
-        # Update annot * pannot info for h2-h2s
+        # Update annot * pannot info for h2-scv
         for AN in res_AN_list:
             ref_col_list = res_AN_list  # to define reference SNPs for h2_enrich
             for term in ["_common", "_lf"]:  # C/LF SNPs; if not, use all SNPs
@@ -544,8 +546,8 @@ def summarize(
     df_sum_tau["type"] = [dic_AN_type[x] for x in res_AN_list]
     df_sum_omega["n_pair"] = [dic_pAN_n_pair[x] for x in res_pAN_list]
 
-    # Summary : h2, h2s, h2_enrich, h2s_enrich
-    for term in ["h2", "h2s"]:
+    # Summary : h2, scv, h2_enrich, scv_enrich
+    for term in ["h2", "scv"]:
         if term == "h2":
             v_coef = np.array(
                 [dic_coef[x] for x in res_AN_list + res_pAN_list], dtype=np.float32
@@ -564,7 +566,7 @@ def summarize(
                 x: np.concatenate([dic_AN_v_ref[x], dic_AN_v_p_ref[x]])
                 for x in res_AN_list
             }
-        if term == "h2s":
+        if term == "scv":
             v_coef = np.array([dic_coef[x] for x in res_AN_list], dtype=np.float32)
             v_coef_jn = np.array(
                 [dic_coef_jn[x] for x in res_AN_list], dtype=np.float32
@@ -687,7 +689,7 @@ def summarize(
         df_sum_omega.loc[pAN, "ecor_se"] = np.sqrt(mat_cov_jn[0, 0])
 
     # Add p-value via z-score
-    for term in ["tau", "h2", "h2s"]:
+    for term in ["tau", "h2", "scv"]:
         temp_z = (df_sum_tau[term] / df_sum_tau["%s_se" % term]).values
         temp_z[np.isnan(temp_z)] = 0
         df_sum_tau["%s_p" % term] = ldspec.util.zsc2pval(temp_z, option="two-sided")
@@ -696,14 +698,14 @@ def summarize(
         temp_z[np.isnan(temp_z)] = 0
         df_sum_omega["%s_p" % term] = ldspec.util.zsc2pval(temp_z, option="two-sided")
 
-    # Add h2_shrink p-value via testing whether h2 - h2s = 0
+    # Add h2_shrink p-value via testing whether h2 - scv = 0
     v_mean_jn, mat_cov_jn = bjn(
-        dic_jn["h2"] / dic_jn["h2s"], dic_jn["h2.jn"] / dic_jn["h2s.jn"], dic_jn["v_h"]
+        dic_jn["h2"] / dic_jn["scv"], dic_jn["h2.jn"] / dic_jn["scv.jn"], dic_jn["v_h"]
     )
     df_sum_tau["h2_shrink"] = v_mean_jn
     df_sum_tau["h2_shrink_se"] = np.sqrt(np.diag(mat_cov_jn))
     v_mean_jn, mat_cov_jn = bjn(
-        dic_jn["h2"] - dic_jn["h2s"], dic_jn["h2.jn"] - dic_jn["h2s.jn"], dic_jn["v_h"]
+        dic_jn["h2"] - dic_jn["scv"], dic_jn["h2.jn"] - dic_jn["scv.jn"], dic_jn["v_h"]
     )
     temp_z = v_mean_jn / np.sqrt(np.diag(mat_cov_jn))
     df_sum_tau["h2_shrink_p"] = ldspec.util.zsc2pval(temp_z, option="two-sided")
