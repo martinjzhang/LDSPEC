@@ -17,7 +17,7 @@ lf_lf_short	LF
 lf_block	low-freq
 lf_block_short	LF
 h2	heritability
-scv	sum of causal effect variance
+scv	sum of causal effect size variance
 h2p	SNP-pair heritability
 h2_enrich	heritability enrichment
 scv_enrich	SCV enrichment
