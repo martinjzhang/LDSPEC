@@ -1,0 +1,6 @@
+h2g	0.500
+p_causal	0.990
+alpha	-1.000
+AN:all_common	1.000
+AN:DHS_Trynka_common	1.000
+pAN:proxy_0_1000_ld_n100_p100_maf_all	0.500
