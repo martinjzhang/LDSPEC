@@ -1,9 +1,9 @@
-# Topy example of LDSPEC pipeline using LDSPEC CLI
+# Example for LDSPEC CLI
 Toy pipeline showcasing steps for running LDSPEC.
-- Example code in `ldspec_pipeline.sh`, example [input files](https://github.com/martinjzhang/LDSPEC/tree/main/ldspec/data), and example [results](https://github.com/martinjzhang/LDSPEC/tree/main/ldspec/data/ldspec_res).
-- See [CLI_ldspec.py](https://github.com/martinjzhang/LDSPEC/blob/main/CLI_ldspec.py) for more details.
+- LDSPEC Python CLI: [CLI_ldspec.py](https://github.com/martinjzhang/LDSPEC/blob/main/CLI_ldspec.py)
+- Toy example for calling `CLI_ldspec`: code `ldspec_pipeline.sh`, [input files](https://github.com/martinjzhang/LDSPEC/tree/main/ldspec/data), [results](https://github.com/martinjzhang/LDSPEC/tree/main/ldspec/data/ldspec_res).
 
-### File formats
+### LDSPEC CLI flags
 - `--job`: one of `get_snp_block`, `compute_ld`, `compute_score`, `compute_avgr`, `regress`.
 - `--pgen_file`: prefix of PLINK2 pgen files. `@` refers to CHR number.
 - `--ld_file`: LDSPEC LD files. 
@@ -13,12 +13,12 @@ Toy pipeline showcasing steps for running LDSPEC.
 - `--sumstats_file`: Summary statistics files, same as in LDSC.
 - `--avgr_file`: LDSPEC `.avgr` file for average r in SNP-pair annotations. 
 - `--prefix_out`: Output prefix.
-- `--snp_range`: SNP range.
-- `--win_size`: window size.
-- `--flag_nofil_snp`: If to filter SNPs in regression.
+- `--snp_range`: SNP range, e.g., `--snp_range c1_s0_e10000` for the first 10,000 SNPs on chromosome 1.
+- `--win_size`: window size, e.g., `--win_size 1e7` for a 10Mb LD window.
+- `--flag_nofil_snp`: If to filter SNPs in regression, default `--flag_nofil_snp False`.
 
 ## Step 1: get SNP blocks
-Create a `.txt` file with SNP ranges. Output example: [ldspec_s1.snp_range.txt](https://github.com/martinjzhang/LDSPEC/blob/main/ldspec/data/ldspec_res/ldspec_s1.snp_range.txt).
+Create `.snp_range.txt` file with SNP ranges. Example: [ldspec_s1.snp_range.txt](https://github.com/martinjzhang/LDSPEC/blob/main/ldspec/data/ldspec_res/ldspec_s1.snp_range.txt).
 
     job=get_snp_block: generate SNP blocks (10,000 SNPs per block)
     - Input : --job | --pgen_file | --prefix_out
@@ -26,7 +26,7 @@ Create a `.txt` file with SNP ranges. Output example: [ldspec_s1.snp_range.txt](
 
 
 ## Step 2: compute LD matrices
-Compute LD matrix for each SNP block in the `snp_range.txt` file; can parallelize.
+Compute LD matrix for each SNP block in the `.snp_range.txt` file; can parallelize.
 
     job=compute_ld : compute LD between target SNPs in `snp_range` and reference SNPs within `win_size` of target SNPs
     - Input : --job | --pgen_file | --prefix_out | --snp_range | [--win_size]
