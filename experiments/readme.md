@@ -1,15 +1,14 @@
 ## Data curation (Table 1): `job.curate_data`
 Curate data for genotype, diseases/traits, SNP annotations. 
-See details in `job.curate_data#readme`
+See details in [job.curate_data#readme](./job.curate_data#readme).
 
 ## Simulation (Fig. 1): `job.simulation`
-- Simulation configurations: `get_config.ipynb`.
+- Generate simulation parameters: `get_config.ipynb`.
 - Generate simulation data: `s1_simulate_paper.sh`.
 - Run LDSPEC on the simulation data: `s2_regress_paper.sh`, `s2_regress_paper.vary_winsize.sh`.
 - Make figures: `paper_simulations.main.ipynb`, `paper_simulations.other_model.ipynb`, `paper_simulations.vary_winsize.ipynb`.
 
-
-## UKB data analyses (Fig. 2-5): `job.analysis_imp_geno_chimp`
+## UKB data analyses (Figs. 2-5): `job.analysis_imp_geno_chimp`
 LDSPEC pipeline:
 - Compute LD: `gdreg_s1_get_ld.all_1e7.sh`, `gdreg_s1_get_ld.all_1e7.sh`.
 - Compute sumstats: `ldspec_s2_get_sumstats.sh`.
@@ -20,7 +19,7 @@ LDSPEC pipeline:
 Compute score correlations: `score_corr.ipynb`
 
 Figures
-- Figure 2,3,5: `paper_main.ipynb`
+- Figures 2,3,5: `paper_main.ipynb`
 - Figure 4: `paper_main.h2enrich_vs_cor.ipynb`
 - Supp. Figures: `paper_main.comparison.ipynb`, `paper_main.individual_trait.ipynb`.
 
