@@ -5,7 +5,7 @@ LDSPEC (LD SNP-pair effect correlation regression) is a method for estimating th
 [Zhang, et al. "Pervasive correlations between causal disease effects of proximal SNPs vary with functional annotations and implicate stabilizing selection"](XX), preprint, 2023.
 
 ### Versions
-- 0.0.3: beta version accompanying initial submission. 
+- 0.0.4: beta version accompanying initial submission. 
 
 ### Code and data for the paper
 See [experiments](https://github.com/martinjzhang/LDSPEC/tree/main/experiments) for more details. Data are at [figshare](https://figshare.com/projects/LD_SNP-pair_effect_correlation_regression_LDSPEC_/188052). 
