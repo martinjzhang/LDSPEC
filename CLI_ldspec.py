@@ -47,6 +47,7 @@ evaluate : model evaluation
 TODO
 ----
 - ldspec.util.update_columns ALT_FREQS is updated as MAF, which is not correct for derived alleles. It may not cause any trouble now as MAF is used in a sysmetrical way: p (1-p). But a thorough check is needed.
+- compute_score: output SNP alignment results
 - 
 """
 

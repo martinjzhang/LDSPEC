@@ -1,19 +1,20 @@
 #!/bin/bash
 #SBATCH -c 1
 #SBATCH -N 1
-#SBATCH -t 0-02:00
-#SBATCH --array=1
+#SBATCH -t 0-12:00
+#SBATCH --array=1,3,5,6
 #SBATCH -p short
-#SBATCH --mem=32000
-#SBATCH -o /home/jz286/WES_analysis/GDReg/job_info/hostname_%j.out  
-#SBATCH -e /home/jz286/WES_analysis/GDReg/job_info/hostname_%j.err 
+#SBATCH --mem=196000
+#SBATCH -o /home/jz286/WES_analysis/LDSPEC/job_info/hostname_%j.out  
+#SBATCH -e /home/jz286/WES_analysis/LDSPEC/job_info/hostname_%j.err 
 #SBATCH --mail-type=NONE#SBATCH --mail-type=NONE
 
 
 CHROM=$SLURM_ARRAY_TASK_ID
-OUTPUT_PATH=/n/groups/price/martin/data_GDREG/imp_geno
+# CHROM=22
 
 # Get PLINK file from bgen
+OUTPUT_PATH=/n/scratch3/users/j/jz286/imp_geno
 # MAF>0.1% INFO>0.6
 plink2 \
     --bgen /n/groups/price/UKBiobank/download_500K/ukb_imp_chr${CHROM}_v3.bgen ref-unknown\
@@ -36,7 +37,7 @@ plink2 \
         && rm ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3.log
   
 # Create a small vcf file
-SMALL_ID_LIST=/n/groups/price/martin/data_GDREG/imp_geno/unrelated_337K.small.txt
+SMALL_ID_LIST=/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001/unrelated_337K.small.txt
 plink2 \
     --pfile ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3\
     --keep $SMALL_ID_LIST --recode vcf\
@@ -46,26 +47,16 @@ plink2 \
 
 
 # Convert to ancestral alleles (chimp): directly converting to pgen
-# CHROM=$SLURM_ARRAY_TASK_ID
-
-CHROM=22
-# REF_FILE=/n/groups/price/martin/data_GDREG/UKBimp_337K_MAF001/snp_info/ukb_imp_chr${CHROM}_v3_aa.pvar
-# OUTPUT_PATH=/n/scratch3/users/j/jz286/imp_geno_chimp
-# # plink2_a37 \
-# #     --pfile /n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3\
-# #     --ref-allele ${REF_FILE} 10 3\
-# #     --make-pgen \
-# #     --out ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
-# #     && rm ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp.log
-
-# plink2_a37 \
-#     --pfile ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
-#     --freq --out ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
-#         && rm ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp.log
-        
-# Update CM 
-plink \
-    --pfile ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
-    --update-cm 
+REF_FILE=/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001/snp_info/ukb_imp_chr${CHROM}_v3_aa.pvar
+OUTPUT_PATH=/n/scratch3/users/j/jz286/imp_geno_chimp
+plink2_a37 \
+    --pfile /n/scratch3/users/j/jz286/imp_geno/ukb_imp_chr${CHROM}_v3\
+    --ref-allele ${REF_FILE} 10 3\
+    --make-pgen \
     --out ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
+    && rm ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp.log
+
+plink2_a37 \
+    --pfile ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
+    --freq --out ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp\
         && rm ${OUTPUT_PATH}/ukb_imp_chr${CHROM}_v3_chimp.log
