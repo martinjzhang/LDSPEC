@@ -3,6 +3,7 @@ import numpy as np
 import scipy as sp
 from scipy import stats
 from scipy import sparse
+from scipy.optimize import minimize
 import pgenlib as pg
 import os
 import re
@@ -11,6 +12,268 @@ import ldspec
 import psutil
 from sys import getsizeof
 import time
+
+################################################################################
+################################# GWAS analysis ################################
+################################################################################
+def analyze_locus(v_z, mat_ld, n_sample, rho_r_ratio=0, n_ctrl=5, pair_list=None):
+    """LRT across all SNP pairs in a locus
+
+    Parameters
+    ----------
+    v_z : np.array
+        Observation of shape (n_pair,2)
+    mat_ld : np.array
+        LD of shape (n_pair)
+    n_sample : np.array
+        Number of samples
+    rho_r_ratio : float
+        Ratio of rho / r
+
+    Returns
+    -------
+    p_val : np.array
+        Association p-values
+    """
+
+    v_z = v_z.astype(np.float32)
+    mat_ld = mat_ld.astype(np.float32)
+
+    # Generate pairs to test
+    n_snp = v_z.shape[0]
+    if pair_list is None:
+        pair_list = [(i, j) for i in range(n_snp) for j in range(i + 1, n_snp)]  # all pairs
+    df_stats = pd.DataFrame(
+        index=pair_list,
+        columns=["lrt", "pval", "w_star"] + ["pval_ctrl%d" % x for x in range(n_ctrl)],
+        dtype=np.float32,
+    )
+
+    # Observed statistics
+    for (i, j) in pair_list:
+        r = mat_ld[i, j]
+        rho = r * rho_r_ratio
+        mat_cov0 = np.array([[1, r], [r, 1]]).astype(np.float32)  # assuming sigma2=1
+        mat_cov1 = n_sample * np.array(
+            [
+                [1 + r**2 + 2 * r * rho, 2 * r + (1 + r**2) * rho],
+                [2 * r + (1 + r**2) * rho, 1 + r**2 + 2 * r * rho],
+            ]
+        ).astype(np.float32)
+        lrt, pval, w_star = get_lrt(v_z[[i, j]], mat_cov0, mat_cov1, w0=1 / n_sample)
+        df_stats.loc[[(i, j)], ["lrt", "pval", "w_star"]] = [lrt, pval, w_star]
+
+    # Empirical null
+    for i_ctrl in range(n_ctrl):
+        np.random.seed(i_ctrl)
+        # sample v_z_ctrl ~ N(0, mat_ld) (ensure diagonal elements are 1)
+        # v_z_ctrl = np.random.multivariate_normal(np.zeros(n_snp), mat_ld, size=1).flatten()
+        v_w, mat_v = np.linalg.eigh(mat_ld)
+        ind_select = v_w > 0
+        mat_u = mat_v[:, ind_select] * np.sqrt(v_w[ind_select])
+        v_norm = np.sqrt((mat_u**2).sum(axis=1))
+        mat_u = mat_u / v_norm[:, None]  # ensure diagonal elements are 1
+        v_z_ctrl = mat_u.dot(np.random.randn(mat_u.shape[1]))
+
+        for i, j in pair_list:
+            r = mat_ld[i, j]
+            rho = r * rho_r_ratio
+            mat_cov0 = np.array([[1, r], [r, 1]]).astype(
+                np.float32
+            )  # assuming sigma2=1
+            mat_cov1 = n_sample * np.array(
+                [
+                    [1 + r**2 + 2 * r * rho, 2 * r + (1 + r**2) * rho],
+                    [2 * r + (1 + r**2) * rho, 1 + r**2 + 2 * r * rho],
+                ]
+            ).astype(np.float32)
+            lrt, pval, w_star = get_lrt(
+                v_z_ctrl[[i, j]], mat_cov0, mat_cov1, w0=1 / n_sample
+            )
+            df_stats.loc[[(i, j)], "pval_ctrl%d" % i_ctrl] = pval
+
+    return df_stats
+
+
+def analyze_batch(input_list, rho_r_ratio=0):
+    """LRT across all SNP pairs in a locus
+
+    Parameters
+    ----------
+    v_z : np.array
+        Observation of shape (n_pair,2)
+    mat_ld : np.array
+        LD of shape (n_pair)
+    n_sample : np.array
+        Number of samples
+    rho_r_ratio : float
+        Ratio of rho / r
+
+    Returns
+    -------
+    p_val : np.array
+        Association p-values
+    """
+
+    # Generate pairs to test    
+    df_stats = pd.DataFrame(
+        index=np.arange(len(input_list)),
+        columns=["SNP1", "SNP2", "Z1", "Z2", "LD", "N", "lrt", "P", "P1", "P2"] ,
+        dtype=np.float32,
+    )
+    # Observed statistics
+    for i in range(len(input_list)):
+        snp1,snp2,z1,z2,r,n_sample = input_list[i]
+        v_z = np.array([z1,z2], dtype=np.float32)
+        rho = r * rho_r_ratio
+        mat_cov0 = np.array([[1, r], [r, 1]]).astype(np.float32)  # assuming sigma2=1
+        mat_cov1 = n_sample * np.array(
+            [
+                [1 + r**2 + 2 * r * rho, 2 * r + (1 + r**2) * rho],
+                [2 * r + (1 + r**2) * rho, 1 + r**2 + 2 * r * rho],
+            ]
+        ).astype(np.float32)
+        lrt, pval, w_star = get_lrt(v_z, mat_cov0, mat_cov1, w0=1 / n_sample)
+        df_stats.loc[i] = [
+            snp1,snp2,z1,z2,r,n_sample, lrt, pval, zsc2pval(z1), zsc2pval(z2),
+        ]
+
+    return df_stats
+
+
+def get_lrt(v_z, mat_cov0, mat_cov1, w0=0.01, tol=1e-4, w_star=None):
+    """Likelihood ratio test for z ~ N(0, cov0 + w cov1)
+
+    Parameters
+    ----------
+    v_z : np.array
+        Observation of shape (2,)
+    mat_cov0 : np.array
+        Null covariance matrix of shape (2,2)
+    mat_cov1 : np.array
+        Unscaled alternative ovariance matrix of shape (2,2)
+    w0 : float
+        Intial optimization value
+
+    Returns
+    -------
+    lrt : float
+        2 * (ll_alt - ll_null)
+    p_val : float
+
+    """
+
+    # Compute log-likelihood for the null model (w=0)
+    ll_null = get_ll(0, v_z, mat_cov0, mat_cov1)
+
+    # Find optimal w for the alternative model and compute its log-likelihood
+    if w_star is None:
+        # Method: method='L-BFGS-B'
+        #         result = minimize(
+        #             lambda w: -get_ll(w, v_z, mat_cov0, mat_cov1),
+        #             x0=[w0],
+        #             bounds=[(0, None)],
+        #             method="L-BFGS-B",
+        #             tol=tol,
+        #         )
+        # Faster version using explicit gradients
+        result = minimize(
+            lambda w: -get_ll(w, v_z, mat_cov0, mat_cov1),
+            x0=[w0],
+            jac=lambda w: -get_ll_grad(w, v_z, mat_cov0, mat_cov1),
+            bounds=[(0, None)],
+            method="L-BFGS-B",
+            tol=tol,
+        )
+        # return result
+        optimal_w = result.x[0]
+    else:
+        optimal_w = w_star
+    ll_alt = get_ll(optimal_w, v_z, mat_cov0, mat_cov1)
+
+    # Compute the likelihood ratio statistic
+    lrt = 2 * (ll_alt - ll_null)
+    # 50:50 Mixture Chi-Squared Adjustment for boundary issue
+    p_val = 0.5 * (lrt == 0) + 0.5 * stats.chi2.sf(lrt, df=1)
+    # p_val = stats.chi2.sf(lrt, df=1)
+
+    return lrt, p_val, optimal_w
+
+
+def get_ll(w, v_z, mat_cov0, mat_cov1):
+    """Log likelihood of distribution z ~ N(0, cov0 + w cov1)
+    - H0: w=0, H1: w>0
+    - z-scores from the following model:
+    - y = X b + e, b ~ N( 0 , w mat_cor), mat_cor_12 = \rho
+
+    Parameters
+    ----------
+    w : float
+        Per-SNP heritability
+    v_z : np.array
+        Observation of shape (2,)
+    mat_cov0 : np.array
+        Null covariance matrix of shape (2,2)
+    mat_cov1 : np.array
+        (Unscaled) alternative covariance matrix of shape (2,2)
+
+    Returns
+    -------
+    log_likelihood : float
+        log likelihood
+    """
+    # Construct the covariance matrix
+    mat_cov = mat_cov0 + w * mat_cov1
+    # Calculate the inverse and determinant
+    mat_cov_inv = np.linalg.inv(mat_cov)
+    # mat_cov_det = np.linalg.det(mat_cov)
+    sign, log_det = np.linalg.slogdet(mat_cov)
+    # Calculate the log-likelihood
+    # ll = -0.5 * np.log(mat_cov_det) - 0.5 * (v_z.T @ mat_cov_inv @ v_z)
+    ll = -0.5 * log_det - 0.5 * (v_z.T @ mat_cov_inv @ v_z)
+    return ll
+
+
+def get_ll_grad(w, v_z, mat_cov0, mat_cov1):
+    """
+    Derivative of log likelihood with respect to w.
+
+    Parameters
+    ----------
+    w : float
+        Per-SNP heritability
+    v_z : np.array
+        Observation of shape (2,)
+    mat_cov0 : np.array
+        Null covariance matrix of shape (2,2)
+    mat_cov1 : np.array
+        (Unscaled) alternative covariance matrix of shape (2,2)
+
+    Returns
+    -------
+    ll_grad : float
+        Derivative of log likelihood with respect to w
+    """
+    # Construct the covariance matrix
+    mat_cov = mat_cov0 + w * mat_cov1
+    # Calculate the inverse and determinant
+    mat_cov_inv = np.linalg.inv(mat_cov)
+    # Gradient of the covariance matrix with respect to w
+    d_mat_cov = mat_cov1
+    # Derivative of the log determinant
+    d_log_det = np.trace(mat_cov_inv @ d_mat_cov)
+    # Derivative of the quadratic term
+    d_quad = -v_z.T @ mat_cov_inv @ d_mat_cov @ mat_cov_inv @ v_z
+    # Total derivative of the log likelihood
+    ll_grad = -0.5 * d_log_det - 0.5 * d_quad
+    return ll_grad
+
+
+def zsc2pval(zsc):
+    """
+    Convert z-score to two-sided p-value.
+    """
+    return 2 * stats.norm.cdf(-np.absolute(zsc))  # This is more accurate
 
 
 ################################################################################
