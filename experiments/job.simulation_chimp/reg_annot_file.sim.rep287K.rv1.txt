@@ -1,0 +1,7 @@
+/n/groups/price/martin/LDSPEC_data/annot_rep287K/baseline_165annots_chr@.annot.gz
+/n/groups/price/martin/LDSPEC_data/annot_rep287K/proxy_0_100.ld_p0_p100.maf_common_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/annot_rep287K/proxy_0_100.ld_p0_p100.maf_lf_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/annot_rep287K/proxy_100_1000.ld_p0_p100.maf_common_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/annot_rep287K/proxy_100_1000.ld_p0_p100.maf_lf_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/annot_rep287K/SuperEnhancer_Hnisz.proxy_0_1000.ld_p0_p100.maf_common_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/annot_rep287K/SuperEnhancer_Hnisz.proxy_0_1000.ld_p0_p100.maf_lf_block.c@.pannot_mat.npz
