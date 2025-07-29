@@ -1,6 +1,14 @@
 ldsc	S-LDSC
 md_bsl	baseline
 md_prox_gene_fct_all_ld	baseline-SP
+simu_causal_pannot	causal-annot
+prox_gene_fct_all_ld_ss50K	baseline-SP (B50K)
+prox_gene_fct_all_ld_NB44K	baseline-SP (NB44K)
+prox_gene_fct_all_ld_EAS2K	baseline-SP (EAS1.4K)
+prox_gene_fct_all_ld_EAS2K.indpt10	baseline-SP (EAS1.4K)
+md_prox_gene_fct_all_ld.indpt10	baseline-SP (10 traits)
+md_prox_gene_fct_all_ld.am	baseline-SP (AM traits)
+md_prox_gene_fct_all_ld.nam	baseline-SP (non-AM traits)
 md_prox_all_ld	baseline-SP-proximity
 md_gene_all_ld	baseline-SP-gene
 md_fct_all_ld	baseline-SP-functional

@@ -103,6 +103,8 @@ def estimate(
     df_score.index = df_score["SNP"]
     ind_rm = df_score.isna().sum(axis=1) > 0
     df_score = df_score.loc[~ind_rm].copy()
+    if 'AN:all' in df_score: # remove SNPs not covered by AN:all
+        df_score = df_score.loc[df_score['AN:all']!=0].copy()
     LD_list = [x for x in df_score if x.startswith("LD:")]
     DLD_list = [x for x in df_score if x.startswith("DLD:")]
     assert "E" in df_score, "'E' not in df_score"

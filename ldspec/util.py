@@ -530,6 +530,26 @@ def pval2zsc(pval, option="two-sided"):
         return -sp.stats.norm.ppf(pval / 2)
 
 
+def corrected_correlation(x, y, se_x, se_y):
+    """
+    Compute observed and corrected correlations
+    """
+    r_obs = np.corrcoef(x, y)[0, 1]
+    var_x = np.var(x, ddof=1)
+    var_y = np.var(y, ddof=1)
+    var_ex = np.mean(np.square(se_x))
+    var_ey = np.mean(np.square(se_y))
+    
+    Rx = 1 - var_ex / var_x
+    Ry = 1 - var_ey / var_y
+    
+    if Rx <= 0 or Ry <= 0:
+        raise ValueError("Reliability estimate is non-positive.")
+    
+    r_corrected = r_obs / np.sqrt(Rx * Ry)
+    return r_obs, r_corrected
+
+
 # def pval2zsc(pval):
 #     """
 #     Convert one-sided p-value to z-score. Accurate up to `zsc=36` and `pval=4.2e-284`.
