@@ -1,0 +1,13 @@
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001/baseline_annot/baseline_165annots_chr@.annot.gz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_0_100_ld_pos/proxy_0_100.ld_p0_p100.maf_common_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_0_100_ld_pos/proxy_0_100.ld_p0_p100.maf_lf_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_100_1000_ld_pos/proxy_100_1000.ld_p0_p100.maf_common_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_100_1000_ld_pos/proxy_100_1000.ld_p0_p100.maf_lf_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_1000_10000_ld_pos/proxy_1000_10000.ld_p0_p100.maf_common_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_1000_10000_ld_pos/proxy_1000_10000.ld_p0_p100.maf_lf_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_0_100_ld_neg/proxy_0_100.ld_n100_p0.maf_common_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_0_100_ld_neg/proxy_0_100.ld_n100_p0.maf_lf_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_100_1000_ld_neg/proxy_100_1000.ld_n100_p0.maf_common_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_100_1000_ld_neg/proxy_100_1000.ld_n100_p0.maf_lf_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_1000_10000_ld_neg/proxy_1000_10000.ld_n100_p0.maf_common_block.c@.pannot_mat.npz
+/n/groups/price/martin/LDSPEC_data/UKBimp_337K_MAF001_chimp/pannot_basic/prox_1000_10000_ld_neg/proxy_1000_10000.ld_n100_p0.maf_lf_block.c@.pannot_mat.npz
